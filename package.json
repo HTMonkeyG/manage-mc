@@ -1,6 +1,6 @@
 {
   "name": "@htmonkeyg/manage-mc",
-  "version": "0.1.0-beta",
+  "version": "0.1.0",
   "description": "A Minecraft Netease Edition world manager.",
   "keywords": [
     "mcpe",
