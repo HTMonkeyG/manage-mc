@@ -11,8 +11,7 @@ for MCBE NBT templates.
 ## Install and run
 
 ```sh
-npm install
-npm start
+npm i @htmonkeyg/manage-mc
 ```
 
 Requires Node 22.19 or newer. `npm install` pulls in `adm-zip`, which is used
