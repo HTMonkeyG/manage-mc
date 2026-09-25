@@ -166,6 +166,25 @@ class Fsx {
   }
 
   /**
+   * Read a file as raw bytes, tolerating absence.
+   *
+   * Use this rather than readTextLenient for anything that is not known to be
+   * text: decoding binary as UTF-8 replaces invalid sequences and the damage is
+   * not reversible.
+   * @param {string} file - File to read.
+   * @returns {Promise<Buffer|null>} File contents, or null when absent.
+   */
+  static async readBufferLenient(file) {
+    try {
+      return await fsp.readFile(file)
+    } catch (e) {
+      if (e.code === "ENOENT" || e.code === "EISDIR")
+        return null
+      throw e
+    }
+  }
+
+  /**
    * Read and parse a JSON file.
    * @param {string} file - File to read.
    * @returns {Promise<object|null>} Parsed value, or null when absent.

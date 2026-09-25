@@ -6,6 +6,7 @@ const Fsx = require("./fsx");
 const GameLayout = require("./paths");
 const LevelDat = require("./leveldat");
 const Pack = require("./pack");
+const XorEnc = require("./xorenc");
 const RecordSchema = require("../records/schema");
 const WorldRecord = require("../records/record");
 const UserFolders = require("../records/users");
@@ -86,8 +87,16 @@ class WorldExporter {
             throw WorldExporter.cancelled();
 
           // Recorded so a consumer can tell a complete package from one that
-          // was truncated in transit.
+          // was truncated in transit. It describes the world as copied, before
+          // any decryption changes file sizes.
           plan.integrity = { algorithm: "counts", fileCount: copied.files, totalBytes: copied.bytes };
+
+          // The client XOR encrypts its LevelDB files, so a package meant to be
+          // readable is decrypted here. The key and the exact list of files it
+          // covered travel in the manifest, which is what lets an import put the
+          // database back the way the client expects it.
+          if (options.decryptXor !== false)
+            plan.xor = await WorldExporter.decryptDatabase(staged, entry, plan, options, warnings);
         }
 
         // The registry row travels even when the world data does not, which is
@@ -139,9 +148,52 @@ class WorldExporter {
       worlds: plans.length,
       bytes: plans.reduce((sum, p) => sum + (p.integrity ? p.integrity.totalBytes : 0), 0),
       files: plans.reduce((sum, p) => sum + (p.integrity ? p.integrity.fileCount : 0), 0),
+      decrypted: plans.filter(p => p.xor && p.xor.decrypted).map(p => ({
+        levelId: p.levelId,
+        keyAscii: p.xor.keyAscii,
+        files: p.xor.files.length
+      })),
       warnings: warnings,
       manifest: manifest
     }
+  }
+
+  /**
+   * Decrypt the staged database of a world.
+   *
+   * A failure to infer the key is not fatal: the world is exported with its
+   * database untouched and the reason is recorded, because an encrypted package
+   * is still a faithful copy.
+   * @param {string} staged - Staged package directory.
+   * @param {object} entry - World entry being exported.
+   * @param {object} plan - Entry plan.
+   * @param {object} options - Export options.
+   * @param {string[]} warnings - Warning sink.
+   * @returns {Promise<object|null>} Decryption record, or null when not applicable.
+   */
+  static async decryptDatabase(staged, entry, plan, options, warnings) {
+    var dbDir = path.join(staged, PACKAGE_WORLDS, entry.levelId, "db");
+
+    if (!(await Fsx.existsDir(dbDir)))
+      return null
+
+    var record = await XorEnc.decryptDir(dbDir, {
+      key: options.xorKey,
+      signal: options.signal
+    });
+
+    if (!record.encrypted)
+      return record
+
+    if (!record.decrypted) {
+      warnings.push(`${entry.levelId}: database left encrypted — ${record.error}`);
+      return record
+    }
+
+    if (record.verified === false)
+      warnings.push(`${entry.levelId}: database decrypted but a table marker did not match; the key may be wrong`);
+
+    return record
   }
 
   /**
@@ -267,6 +319,7 @@ class WorldExporter {
         })),
         usersOmitted: plan.usersOmitted,
         integrity: plan.integrity,
+        xor: plan.xor || null,
         notes: plan.notes
       }))
     }

@@ -17,7 +17,10 @@ const DEFAULTS = {
   export: {
     format: "folder",
     includeUsers: true,
-    includeOrphanUsers: false
+    includeOrphanUsers: false,
+    // Decrypt the client's XOR encrypted database into the package, recording
+    // the key so an import can put the encryption back.
+    decryptWorlds: true
   },
   import: {
     onCollision: "copy",

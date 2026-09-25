@@ -4,6 +4,7 @@ const fsp = require("fs/promises")
 
 const Fsx = require("./fsx");
 const LevelDat = require("./leveldat");
+const XorEnc = require("./xorenc");
 const LevelId = require("../records/levelid");
 const RecordSchema = require("../records/schema");
 const UserFolders = require("../records/users");
@@ -128,6 +129,17 @@ class WorldImporter {
     // the record's user_ids, and that map is what the client reads.
     var size = worldPresent ? await Fsx.du(candidate.worldDir) : { files: 0, bytes: 0 };
 
+    // A package whose database was decrypted for export has to be encrypted
+    // again, because the client only reads an encrypted database. The recorded
+    // file list says exactly which files the encryption covered, which matters
+    // because a plain ".log" must stay plain.
+    var xor = candidate.manifest && candidate.manifest.xor && candidate.manifest.xor.decrypted
+      ? {
+          files: Array.isArray(candidate.manifest.xor.files) ? candidate.manifest.xor.files : null,
+          originalKeyAscii: candidate.manifest.xor.keyAscii || null
+        }
+      : null;
+
     // A re-minted id cannot be pushed into the read-only account state, so the
     // stale resume pointer is reported instead of silently left behind.
     if (minted && worldPresent) {
@@ -148,6 +160,7 @@ class WorldImporter {
       notes: built.notes,
       levelMeta: levelMeta,
       size: size,
+      xor: xor,
       warnings: warnings
     }
   }
@@ -356,7 +369,8 @@ class WorldImporter {
       , worldAside = null
       , recordAside = null
       , published = false
-      , recordWritten = false;
+      , recordWritten = false
+      , xorResult = null;
 
     await layout.ensureStorage();
 
@@ -376,6 +390,28 @@ class WorldImporter {
 
         if (copied.files !== step.size.files || copied.bytes !== step.size.bytes)
           throw new Error(`Staged copy of "${step.record.name}" does not match the source`);
+
+        // Restore the database encryption the client expects. This runs on the
+        // staged copy, so a failure cannot leave a half-converted database
+        // published. The default key is used: it is the key the client itself
+        // applies, so it is what the world has to carry to be playable.
+        if (step.xor) {
+          var encrypted = await XorEnc.encryptDir(path.join(staged, "db"), {
+            files: step.xor.files,
+            signal: options.signal
+          });
+
+          xorResult = {
+            files: encrypted.files.length,
+            keyAscii: encrypted.keyAscii,
+            originalKeyAscii: step.xor.originalKeyAscii
+          };
+
+          if (encrypted.files.length === 0)
+            warnings.push(`"${step.record.name}": no database file needed encrypting`);
+          else if (step.xor.originalKeyAscii && step.xor.originalKeyAscii !== encrypted.keyAscii)
+            warnings.push(`"${step.record.name}": re-encrypted with the default key ${encrypted.keyAscii}, not the exported key ${step.xor.originalKeyAscii}`);
+        }
 
         if (options.onProgress)
           options.onProgress({
@@ -432,6 +468,7 @@ class WorldImporter {
       files: step.size.files,
       userIds: WorldRecord.userIds(step.record),
       synthesized: step.synthesized,
+      xor: xorResult,
       warnings: warnings
     }
   }

@@ -109,6 +109,13 @@ class SettingsScreen {
         values: FORMAT_VALUES
       },
       {
+        id: "decryptWorlds",
+        label: "导出时解密数据库",
+        description: "推断密钥并解密 db 中的加密文件，密钥写入 manifest；导入时用默认密钥重新加密。关闭则原样复制。",
+        currentValue: config.export.decryptWorlds === false ? "否" : "是",
+        values: YES_NO_VALUES
+      },
+      {
         id: "includeOrphanUsers",
         label: "收集孤立账号目录",
         description: "同时收集记录未声明、但目录名匹配的账号文件夹",
@@ -144,6 +151,8 @@ class SettingsScreen {
       patch = { export: { format: FORMAT_BY_LABEL[label] || "folder" } };
     else if (id === "includeOrphanUsers")
       patch = { export: { includeOrphanUsers: label === "是" } };
+    else if (id === "decryptWorlds")
+      patch = { export: { decryptWorlds: label === "是" } };
     else if (id === "onCollision")
       patch = { import: { onCollision: COLLISION_BY_LABEL[label] || "copy" } };
 

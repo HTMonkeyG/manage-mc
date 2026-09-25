@@ -5,6 +5,7 @@ const { Container, Input, Spacer, Text, Key, matchesKey } = require("@earendil-w
 
 const Config = require("../../config");
 const Fsx = require("../../os/fsx");
+const XorEnc = require("../../os/xorenc");
 const WorldExporter = require("../../os/exporter");
 const Theme = require("../theme");
 const InfoPanel = require("../components/infoPanel");
@@ -86,6 +87,21 @@ class ExportWizardScreen {
     this.container.addChild(new Spacer(1));
     this.container.addChild(this.info);
 
+    this.format = format;
+    this.info.setRows(this.buildRows());
+
+    // The database scan reads four bytes per file, but it is still async work,
+    // so it lands after the first paint rather than delaying the screen.
+    this.inspectDatabases();
+
+    return this.container
+  }
+
+  /**
+   * Build the information rows.
+   * @returns {object[]}
+   */
+  buildRows() {
     var rows = [{ section: "将导出" }];
 
     for (var entry of this.entries.slice(0, LIST_LIMIT))
@@ -97,18 +113,92 @@ class ExportWizardScreen {
       rows.push({ text: `  … 其余 ${this.entries.length - LIST_LIMIT} 个` });
 
     rows.push({ section: "格式" });
-    rows.push({ text: `  当前：${format === "zip" ? "zip 压缩包" : "文件夹"}（可在设置中修改）` });
+    rows.push({ text: `  当前：${this.format === "zip" ? "zip 压缩包" : "文件夹"}（可在设置中修改）` });
 
-    if (format === "zip")
+    if (this.format === "zip")
       rows.push({ text: Theme.chalk.dim("  zip 会在内存中组装，超大世界建议改用文件夹格式。") });
+
+    rows.push(...this.databaseRows());
 
     rows.push({ section: "说明" });
     rows.push({ text: Theme.chalk.dim("  包内为 minecraftWorlds、storage/stream 与 manifest.json。") });
     rows.push({ text: Theme.chalk.dim("  账号目录只收集目录名与该世界 id 相同的部分。") });
 
-    this.info.setRows(rows);
+    return rows
+  }
 
-    return this.container
+  /**
+   * Rows describing what will happen to encrypted databases.
+   * @returns {object[]}
+   */
+  databaseRows() {
+    var rows = [{ section: "数据库加密" }]
+      , decrypting = this.app.config.export.decryptWorlds !== false;
+
+    if (this.dbSummary === undefined) {
+      rows.push({ text: Theme.chalk.dim("  正在检查…") });
+      return rows
+    }
+
+    if (this.dbSummary.encrypted === 0) {
+      rows.push({ text: Theme.chalk.dim("  所选世界的数据库均为明文，无需解密。") });
+      return rows
+    }
+
+    if (!decrypting) {
+      rows.push({ text: Theme.chalk.yellow(`  ${this.dbSummary.encrypted} 个世界的数据库已加密；按设置将原样复制。`) });
+      return rows
+    }
+
+    rows.push({ text: `  ${this.dbSummary.encrypted} 个世界的数据库已加密，将解密后打包。` });
+    rows.push({ text: `  其中 ${this.dbSummary.inferred} 个可推断出密钥，密钥会写入 manifest。` });
+
+    if (this.dbSummary.failed > 0)
+      rows.push({ text: Theme.chalk.yellow(`  ${this.dbSummary.failed} 个无法推断密钥，将保持加密导出。`) });
+
+    rows.push({ text: Theme.chalk.dim("  导入本程序导出的包时，会用默认密钥重新加密。") });
+
+    return rows
+  }
+
+  /**
+   * Count how many selected worlds carry an encrypted database.
+   * @returns {Promise<void>}
+   */
+  async inspectDatabases() {
+    var encrypted = 0
+      , inferred = 0
+      , failed = 0;
+
+    try {
+      for (var entry of this.entries) {
+        if (!entry.worldDir)
+          continue
+
+        var dbDir = path.join(entry.worldDir, "db");
+
+        if (!(await Fsx.existsDir(dbDir)))
+          continue
+
+        var view = await XorEnc.inspect(dbDir);
+
+        if (!view.isEncrypted)
+          continue
+
+        encrypted++;
+
+        if (await XorEnc.inferKey(dbDir))
+          inferred++;
+        else
+          failed++;
+      }
+    } catch (e) {
+      this.app.setStatus(`检查数据库加密状态失败：${e.message}`, "error");
+    }
+
+    this.dbSummary = { encrypted: encrypted, inferred: inferred, failed: failed };
+    this.info.setRows(this.buildRows());
+    this.app.tui.requestRender();
   }
 
   /**
@@ -225,6 +315,7 @@ class ExportWizardScreen {
           format: format,
           includeUsers: this.app.config.export.includeUsers !== false,
           includeOrphanUsers: Boolean(this.app.config.export.includeOrphanUsers),
+          decryptXor: this.app.config.export.decryptWorlds !== false,
           onProgress: progress
         }
       ));
@@ -247,6 +338,9 @@ class ExportWizardScreen {
       `目标：${report.target}`,
       `世界：${report.worlds} 个 · ${Theme.size(report.bytes)} · ${report.files} 个文件`
     ];
+
+    for (var item of report.decrypted || [])
+      lines.push(`· ${item.levelId}：数据库已解密（${item.files} 个文件，密钥 ${item.keyAscii}）`);
 
     for (var warning of report.warnings)
       lines.push(`! ${warning}`);

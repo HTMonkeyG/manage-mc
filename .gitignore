@@ -1,7 +1,8 @@
 node_modules/
 dist/
-example/
-template/
+reference/
+.VSCodeCounter/
+.vscode/
 
 test*
 package-lock.json

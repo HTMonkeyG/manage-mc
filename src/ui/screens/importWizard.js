@@ -198,6 +198,16 @@ class ImportWizardScreen {
       for (var world of source.worlds)
         lines.push(`  · ${world.levelId}${world.worldDir ? "" : "（无世界数据）"}`);
 
+    // A package exported with its databases decrypted has to have them put back,
+    // because the client only reads an encrypted database.
+    var reencrypt = (source.manifest && Array.isArray(source.manifest.worlds) ? source.manifest.worlds : [])
+      .filter(w => w.xor && w.xor.decrypted);
+
+    if (reencrypt.length > 0) {
+      lines.push(`数据库：${reencrypt.length} 个世界在导出时被解密，`);
+      lines.push("  导入时会用默认密钥 88329851 重新加密。");
+    }
+
     for (var warning of source.warnings)
       lines.push(`! ${warning}`);
 
@@ -349,6 +359,9 @@ class ImportWizardScreen {
         parts.push(`（新 id，原 ${result.originalLevelId}）`);
 
       parts.push(`· 账号 ${result.userIds.length > 0 ? result.userIds.join(", ") : "（无）"}`);
+
+      if (result.xor)
+        parts.push(`· 数据库已用默认密钥 ${result.xor.keyAscii} 重新加密（${result.xor.files} 个文件）`);
 
       if (result.synthesized)
         parts.push("· 记录为生成");

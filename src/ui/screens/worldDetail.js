@@ -1,5 +1,9 @@
+const path = require("path");
+
 const { ScrollView, Key, matchesKey } = require("@earendil-works/pi-tui");
 
+const Fsx = require("../../os/fsx");
+const XorEnc = require("../../os/xorenc");
 const LevelId = require("../../records/levelid");
 const WorldRecord = require("../../records/record");
 const WorldRegistry = require("../../records/registry");
@@ -31,6 +35,38 @@ class WorldDetailScreen {
     this.entry = entry;
     this.panel = new InfoPanel();
     this.scroll = null;
+    this.dbState = null;
+  }
+
+  /**
+   * Read the encryption state of a world's database, inferring the key when it
+   * is encrypted.
+   *
+   * Only magic numbers and the small CURRENT file are read, plus one table for
+   * verification, so this stays cheap on a large world.
+   * @param {object} entry - World entry.
+   * @returns {Promise<object|null>} Database state, or null when there is no db.
+   */
+  static async inspectDatabase(entry) {
+    if (!entry.worldDir)
+      return null
+
+    var dbDir = path.join(entry.worldDir, "db");
+
+    if (!(await Fsx.existsDir(dbDir)))
+      return null
+
+    var view = await XorEnc.inspect(dbDir);
+
+    if (!view.isEncrypted)
+      return Object.assign({ key: null, verified: null }, view);
+
+    var inferred = await XorEnc.inferKey(dbDir);
+
+    return Object.assign({
+      key: inferred ? inferred.key : null,
+      verified: inferred ? inferred.verified : null
+    }, view);
   }
 
   /**
@@ -105,6 +141,9 @@ class WorldDetailScreen {
       if (entry.worldDir && !entry.size)
         await WorldRegistry.measure(entry);
 
+      if (entry.worldDir && !this.dbState)
+        this.dbState = await WorldDetailScreen.inspectDatabase(entry);
+
       this.panel.setRows(this.buildRows());
       app.tui.requestRender();
     } catch (e) {
@@ -135,6 +174,9 @@ class WorldDetailScreen {
         : (entry.worldDir ? Theme.chalk.dim("统计中…") : Theme.chalk.dim("—"))
     });
 
+    if (this.dbState)
+      rows.push(...this.databaseRows());
+
     if (entry.record)
       rows.push(...this.recordRows(entry.record));
 
@@ -154,6 +196,51 @@ class WorldDetailScreen {
       rows.push({ section: "状态说明" });
       rows.push({ text: `  ${Theme.stateHint(entry.state)}` });
     }
+
+    return rows
+  }
+
+  /**
+   * Rows describing the database encryption.
+   * @returns {object[]}
+   */
+  databaseRows() {
+    var state = this.dbState
+      , rows = [{ section: "数据库 (db/)" }];
+
+    rows.push({
+      key: "加密状态",
+      value: state.isEncrypted
+        ? Theme.chalk.yellow("已加密 (XOR)")
+        : Theme.chalk.green("明文")
+    });
+
+    rows.push({ key: "文件", value: `${state.encrypted.length} 个已加密 · ${state.plain.length} 个明文` });
+
+    if (state.manifest)
+      rows.push({ key: "MANIFEST", value: state.manifest });
+
+    if (!state.isEncrypted) {
+      rows.push({ text: Theme.chalk.dim("  明文数据库无需解密，导出时原样复制，导入时也不加密。") });
+      return rows
+    }
+
+    if (!state.key) {
+      rows.push({ text: Theme.chalk.red("  无法推断密钥：缺少 MANIFEST 文件，或 CURRENT 内容不是 MANIFEST 文件名。") });
+      rows.push({ text: Theme.chalk.dim("  导出时数据库会保持加密，并记录失败原因。") });
+      return rows
+    }
+
+    var described = XorEnc.describeKey(state.key);
+
+    rows.push({ key: "推断密钥", value: `${described.ascii}   hex ${described.hex}` });
+    rows.push({
+      key: "密钥校验",
+      value: state.verified === true
+        ? Theme.chalk.green("通过（表尾标记匹配）")
+        : (state.verified === null ? Theme.chalk.dim("无 .ldb 可用于校验") : Theme.chalk.red("未通过"))
+    });
+    rows.push({ text: Theme.chalk.dim("  导出时按此密钥解密，密钥写入 manifest；导入时用默认密钥重新加密。") });
 
     return rows
   }
