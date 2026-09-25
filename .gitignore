@@ -4,3 +4,4 @@ example/
 template/
 
 test*
+package-lock.json

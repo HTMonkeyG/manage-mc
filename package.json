@@ -1,6 +1,6 @@
 {
   "name": "@htmonkeyg/manage-mc",
-  "version": "0.1.0",
+  "version": "0.1.0-beta",
   "description": "A Minecraft Netease Edition world manager.",
   "keywords": [
     "mcpe",
@@ -9,9 +9,18 @@
     "netease",
     "leveldb"
   ],
+  "files": [
+    "dist/",
+    "README.md",
+    "package.json",
+    "LICENSE"
+  ],
   "homepage": "https://github.com/HTMonkeyG/manage-mc#readme",
   "bugs": {
     "url": "https://github.com/HTMonkeyG/manage-mc/issues"
+  },
+  "bin": {
+    "mngmc": "dist/cli.js"
   },
   "repository": {
     "type": "git",
@@ -20,9 +29,8 @@
   "license": "MIT",
   "author": "HTMonkeyG",
   "type": "commonjs",
-  "main": "src/main.js",
   "scripts": {
-    "start": "node src/main.js"
+    "build": "npx webpack"
   },
   "engines": {
     "node": ">=22.19.0"
@@ -33,5 +41,10 @@
     "chalk": "^6.0.0",
     "parsenbt-js": "^4.0.0",
     "project-mirror-registry": "^2.0.0"
+  },
+  "devDependencies": {
+    "terser-webpack-plugin": "^5.6.1",
+    "webpack": "^5.111.1",
+    "webpack-cli": "^7.2.3"
   }
 }
