@@ -1,4 +1,4 @@
-const { SettingsList } = require("@earendil-works/pi-tui");
+const { SettingsList, Key, matchesKey } = require("@earendil-works/pi-tui");
 
 const Config = require("../../config");
 const Theme = require("../theme");
@@ -177,17 +177,19 @@ class SettingsScreen {
    * @returns {object|undefined} Consume result.
    */
   handleKey(data) {
-    if (data === "q") {
+    if (matchesKey(data, "q") || matchesKey(data, Key.ctrl("q"))) {
       this.app.quit();
       return { consume: true }
     }
 
-    if (data === "r") {
+    if (matchesKey(data, "r")) {
       this.changeRoot();
       return { consume: true }
     }
 
-    if (data === "b" || data === "\u001b") {
+    // Matched, not compared: Escape arrives as \x1b or \x1b[27u depending on
+    // the terminal.
+    if (matchesKey(data, Key.escape) || matchesKey(data, "b")) {
       this.back();
       return { consume: true }
     }

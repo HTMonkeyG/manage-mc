@@ -1,4 +1,4 @@
-const { Container, Input, Spacer, Text } = require("@earendil-works/pi-tui");
+const { Container, Input, Spacer, Text, Key, matchesKey } = require("@earendil-works/pi-tui");
 
 const Config = require("../../config");
 const Fsx = require("../../os/fsx");
@@ -108,7 +108,9 @@ class ImportWizardScreen {
    * @returns {object|undefined} Consume result.
    */
   handleKey(data) {
-    if (data === "\u001b") {
+    // Matched, not compared: Escape arrives as \x1b or \x1b[27u depending on
+    // the terminal, and every other key belongs to the focused path input.
+    if (matchesKey(data, Key.escape)) {
       this.back();
       return { consume: true }
     }

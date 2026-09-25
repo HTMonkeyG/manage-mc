@@ -1,4 +1,4 @@
-const { ProcessTerminal, TuiAltScreen, VStack, Container, isViewportTUI, Key, matchesKey } = require("@earendil-works/pi-tui");
+const { ProcessTerminal, TuiAltScreen, VStack, isViewportTUI, Key, matchesKey } = require("@earendil-works/pi-tui");
 
 const Config = require("../config");
 const GameLayout = require("../os/paths");
@@ -28,19 +28,8 @@ class App {
 
     this.header = new HeaderBar();
     this.status = new StatusBar();
-    this.body = new Container();
 
     this.header.set(APP_TITLE, "");
-
-    // Fixed header and footer around a growable body, so content scrolls
-    // without the chrome moving.
-    if (isViewportTUI(this.tui)) {
-      this.tui.setLayoutRoot(new VStack([
-        { component: this.header, basis: 2 },
-        { component: this.body, grow: 1, minSize: 3 },
-        { component: this.status, basis: 1 }
-      ], { gap: 0 }));
-    }
 
     // Ctrl+C is registered on the TUI rather than on a component, because an
     // overlay holding focus would otherwise swallow it.
@@ -133,21 +122,31 @@ class App {
       this.screen.unmount();
 
     this.screen = screen;
-    this.body.clear();
     this.status.set("");
 
     var component = await screen.mount(this);
 
-    if (component)
-      this.body.addChild(component);
-
     this.header.set(screen.title(), screen.subtitle());
     this.status.setHint(screen.hint());
 
+    // The screen's component is mounted as the layout entry itself. Wrapping it
+    // in a plain Container would hide a ScrollView from the layout, leaving it
+    // with no viewport height and neither wheel nor keyboard scrolling.
+    if (isViewportTUI(this.tui)) {
+      this.tui.setLayoutRoot(new VStack([
+        { component: this.header, basis: 2 },
+        { component: component, grow: 1, minSize: 3 },
+        { component: this.status, basis: 1 }
+      ], { gap: 0 }));
+    }
+
+    // Focus is always reassigned, including to null. Leaving the previous
+    // screen's focus in place lets that component keep receiving keys it should
+    // no longer see, which is how Escape on a screen with no focus target used
+    // to reach the world list's cancel handler and quit the application.
     var focus = screen.focus ? screen.focus() : null;
 
-    if (focus)
-      this.tui.setFocus(focus);
+    this.tui.setFocus(focus || null);
 
     this.tui.requestRender();
   }

@@ -1,4 +1,4 @@
-const { SelectList, matchesKey } = require("@earendil-works/pi-tui");
+const { SelectList, Key, matchesKey } = require("@earendil-works/pi-tui");
 
 const WorldRegistry = require("../../records/registry");
 const Theme = require("../theme");
@@ -11,13 +11,15 @@ const HINT = "Enter 详情 · i 导入 · e 导出 · E 导出全部 · p 注册
 class WorldListScreen {
   /**
    * Main screen: every world the registry and the folder set describe.
+   * @param {string} [initialLevelId] - World to leave the cursor on.
    */
-  constructor() {
+  constructor(initialLevelId) {
     this.app = null;
     this.list = null;
     this.items = [];
     this.registry = [];
     this.measuring = false;
+    this.initialLevelId = initialLevelId || null;
   }
 
   /**
@@ -83,8 +85,17 @@ class WorldListScreen {
     if (!this.list) {
       this.list = new SelectList(this.items, WorldListScreen.visibleRows(), Theme.selectList());
       this.list.onSelect = item => this.openDetail(item.value);
-      this.list.onCancel = () => this.app.quit();
+
+      // Escape deliberately does nothing here. There is no level above the
+      // world list to go back to, and quitting on Escape is a surprise when
+      // Escape means "go up" everywhere else; q and Ctrl+C remain the exits.
+      this.list.onCancel = () => {};
     }
+
+    var restored = this.registry.findIndex(entry => entry.levelId === this.initialLevelId);
+
+    if (restored >= 0)
+      this.list.setSelectedIndex(restored);
   }
 
   /**
@@ -197,6 +208,8 @@ class WorldListScreen {
    * @returns {Promise<void>}
    */
   async refresh() {
+    var selected = this.selected();
+
     this.app.setStatus("正在重新读取…", "busy");
 
     try {
@@ -206,17 +219,13 @@ class WorldListScreen {
       return
     }
 
-    this.list = null;
-    this.app.body.clear();
-    this.rebuild();
-    this.app.body.addChild(this.list);
-    this.app.tui.setFocus(this.list);
+    // A fresh screen re-reads and re-measures; the cursor is carried over so a
+    // refresh does not lose the user's place.
+    await this.app.show(new WorldListScreen(selected ? selected.levelId : null));
 
-    var counts = WorldRegistry.countByState(this.registry);
+    var counts = WorldRegistry.countByState(this.app.entries);
 
-    this.app.setStatus(`共 ${this.registry.length} 个条目：正常 ${counts.registered} · 未注册 ${counts.unregistered} · 在线 ${counts.online} · 数据缺失 ${counts.dangling}`, "ok");
-
-    this.measureAll();
+    this.app.setStatus(`共 ${this.app.entries.length} 个条目：正常 ${counts.registered} · 未注册 ${counts.unregistered} · 在线 ${counts.online} · 数据缺失 ${counts.dangling}`, "ok");
   }
 
   /**

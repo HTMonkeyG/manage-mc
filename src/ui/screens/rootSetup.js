@@ -1,7 +1,7 @@
 const os = require("os")
   , path = require("path");
 
-const { Container, Input, Spacer, Text } = require("@earendil-works/pi-tui");
+const { Container, Input, Spacer, Text, Key, matchesKey } = require("@earendil-works/pi-tui");
 
 const Fsx = require("../../os/fsx");
 const GameLayout = require("../../os/paths");
@@ -53,7 +53,35 @@ class RootSetupScreen {
    * @returns {string}
    */
   hint() {
-    return "输入目录后按 Enter 校验并保存 · Esc 退出"
+    // Escape only goes back when a root is already in use. On first run there
+    // is nothing above this screen, so Ctrl+C is the way out.
+    return this.app && this.app.layout
+      ? "输入目录后按 Enter 校验并保存 · Esc 返回 · Ctrl+C 退出"
+      : "输入目录后按 Enter 校验并保存 · Ctrl+C 退出"
+  }
+
+  /**
+   * Handle screen level hotkeys.
+   * @param {string} data - Raw key data.
+   * @returns {object|undefined} Consume result.
+   */
+  handleKey(data) {
+    if (matchesKey(data, Key.escape) && this.app && this.app.layout) {
+      this.cancel();
+      return { consume: true }
+    }
+
+    return undefined
+  }
+
+  /**
+   * Abandon the change and return to the world list.
+   * @returns {Promise<void>}
+   */
+  async cancel() {
+    var WorldListScreen = require("./worldList");
+
+    await this.app.show(new WorldListScreen());
   }
 
   /**

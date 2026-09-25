@@ -1,4 +1,4 @@
-const { ScrollView } = require("@earendil-works/pi-tui");
+const { ScrollView, Key, matchesKey } = require("@earendil-works/pi-tui");
 
 const LevelId = require("../../records/levelid");
 const WorldRecord = require("../../records/record");
@@ -273,37 +273,66 @@ class WorldDetailScreen {
    * @returns {object|undefined} Consume result.
    */
   handleKey(data) {
-    if (data === "q" || data === "\u0011") {
+    if (matchesKey(data, "q") || matchesKey(data, Key.ctrl("q"))) {
       this.app.quit();
       return { consume: true }
     }
 
-    if (data === "b" || data === "\u001b") {
+    // Escape is matched rather than compared against a literal: the same key
+    // arrives as a bare \x1b or as the Kitty sequence \x1b[27u depending on the
+    // terminal, and only one of those equals "\u001b".
+    if (matchesKey(data, Key.escape) || matchesKey(data, "b")) {
       this.back();
       return { consume: true }
     }
 
-    if (data === "e") {
+    if (matchesKey(data, "e")) {
       this.exportWorld();
       return { consume: true }
     }
 
-    if (data === "p") {
+    if (matchesKey(data, "p")) {
       this.repair();
       return { consume: true }
+    }
+
+    // The alt screen leaves its single-line scroll bindings unbound by default,
+    // and binding the arrow keys globally would stop them reaching a focused
+    // list. The detail view is the only scrollable screen, so it scrolls itself.
+    // PageUp and PageDown are already bound, and are left to the alt screen.
+    if (this.scroll) {
+      if (matchesKey(data, Key.up)) {
+        this.scroll.scrollBy(-1);
+        return { consume: true }
+      }
+
+      if (matchesKey(data, Key.down)) {
+        this.scroll.scrollBy(1);
+        return { consume: true }
+      }
+
+      if (matchesKey(data, Key.home)) {
+        this.scroll.scrollToStart();
+        return { consume: true }
+      }
+
+      if (matchesKey(data, Key.end)) {
+        this.scroll.scrollToEnd();
+        return { consume: true }
+      }
     }
 
     return undefined
   }
 
   /**
-   * Return to the world list.
+   * Return to the world list, keeping the cursor on this world.
    * @returns {Promise<void>}
    */
   async back() {
     var WorldListScreen = require("./worldList");
 
-    await this.app.show(new WorldListScreen());
+    await this.app.show(new WorldListScreen(this.entry.levelId));
   }
 
   /**

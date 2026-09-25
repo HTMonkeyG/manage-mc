@@ -34,8 +34,13 @@ On first run the app asks for the game data folder, then remembers it in
 | `s` | Settings |
 | `q` | Quit |
 
-On the detail screen, `↑`/`↓` scroll, `e` exports and `b` goes back. `Ctrl+C`
-quits from anywhere.
+On the detail screen, `↑`/`↓`/`Home`/`End` and the mouse wheel scroll the
+panel, `PageUp`/`PageDown` scroll by a page, `e` exports and `b` goes back —
+returning with the cursor still on the same world.
+
+`Esc` always means "go up one level" and never quits: on the detail, import and
+export screens it goes back, and on the world list it does nothing, since there
+is no level above it. `q` and `Ctrl+C` are the only ways to quit.
 
 ### Import sources
 
