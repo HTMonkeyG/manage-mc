@@ -4,8 +4,10 @@ const Config = require("../../config");
 const Fsx = require("../../os/fsx");
 const SourceDetector = require("../../os/detect");
 const WorldImporter = require("../../os/importer");
+const UserFolders = require("../../records/users");
 const Theme = require("../theme");
 const InfoPanel = require("../components/infoPanel");
+const AccountPicker = require("../components/accountPicker");
 const RootSetupScreen = require("./rootSetup");
 
 // Source kinds reported by the detector, in user facing terms.
@@ -96,7 +98,8 @@ class ImportWizardScreen {
       { text: "  zip 压缩包（需安装 adm-zip）" },
       { section: "说明" },
       { text: Theme.chalk.dim("  记录中的 path 会按目标机器重新计算，不会沿用来源机器的路径。") },
-      { text: Theme.chalk.dim("  同名世界默认以副本方式导入，会分配新的 level_id。") }
+      { text: Theme.chalk.dim("  同名世界默认以副本方式导入，会分配新的 level_id。") },
+      { text: Theme.chalk.dim("  导入时会选择账号，写入记录的 user_ids；不会创建账号目录。") }
     ]);
 
     return this.container
@@ -203,11 +206,19 @@ class ImportWizardScreen {
     if (!proceed)
       return
 
+    var chosen = await this.chooseAccounts(source);
+
+    if (chosen === null) {
+      this.app.setStatus("已取消导入", "warn");
+      return
+    }
+
     var plan, preflight;
 
     try {
       plan = await WorldImporter.plan(this.app.layout, source, {
-        onCollision: this.app.config.import.onCollision
+        onCollision: this.app.config.import.onCollision,
+        userIds: chosen
       });
       preflight = await WorldImporter.preflight(plan, this.app.layout);
     } catch (e) {
@@ -237,6 +248,71 @@ class ImportWizardScreen {
       return
 
     await this.run(plan, source, resolved);
+  }
+
+  /**
+   * Ask which accounts the imported worlds should be attached to.
+   *
+   * The answer is written into each record's user_ids. No account folder is
+   * created, so this is the whole of the account handling.
+   * @param {object} source - Detected source.
+   * @returns {Promise<string[]|null>} Chosen account ids, or null when cancelled.
+   */
+  async chooseAccounts(source) {
+    var context = await UserFolders.context(this.app.layout)
+      , merged = new Map()
+      , selected = new Set();
+
+    // One selection covers the whole batch: a source holding many worlds is
+    // imported for the same account.
+    for (var world of source.worlds) {
+      var suggestion = UserFolders.suggest(world, context);
+
+      for (var entry of suggestion.candidates) {
+        var existing = merged.get(entry.uid);
+
+        if (!existing)
+          merged.set(entry.uid, Object.assign({}, entry));
+        else {
+          existing.inRecord = existing.inRecord || entry.inRecord;
+          existing.inSource = existing.inSource || entry.inSource;
+          existing.hasFolder = existing.hasFolder || entry.hasFolder;
+        }
+      }
+
+      for (var uid of suggestion.selected)
+        selected.add(uid);
+    }
+
+    if (merged.size === 0) {
+      // Nothing to offer and nothing to guess, so the user has to name an
+      // account or accept an empty user_ids.
+      this.app.setStatus("未找到候选账号，可按 a 手动添加", "warn");
+    }
+
+    var worldLabel = source.worlds.length === 1
+      ? (source.worlds[0].displayName || source.worlds[0].levelId)
+      : `${source.worlds.length} 个世界`;
+
+    return new Promise(resolve => {
+      var picker = new AccountPicker({
+        app: this.app,
+        candidates: Array.from(merged.values()),
+        selected: Array.from(selected),
+        done: chosen => {
+          handle.hide();
+          this.app.tui.requestRender();
+          resolve(chosen);
+        }
+      });
+
+      var handle = this.app.tui.showOverlay(picker, {
+        width: "76%",
+        minWidth: 44,
+        maxHeight: "80%",
+        anchor: "center"
+      });
+    });
   }
 
   /**
@@ -272,8 +348,7 @@ class ImportWizardScreen {
       if (result.minted)
         parts.push(`（新 id，原 ${result.originalLevelId}）`);
 
-      if (result.users.length > 0)
-        parts.push(`· 账号 ${result.users.join(", ")}`);
+      parts.push(`· 账号 ${result.userIds.length > 0 ? result.userIds.join(", ") : "（无）"}`);
 
       if (result.synthesized)
         parts.push("· 记录为生成");

@@ -1,118 +1,137 @@
 const Fsx = require("../os/fsx");
-const GameLayout = require("../os/paths");
 const WorldRecord = require("./record");
 
 // The client creates a literal folder named "None" for a signed-out account.
-// It is a client artefact rather than user data, so it is never recreated
-// unless the user asks for it by name.
+// It is a client artefact rather than a user, so it is never offered as a
+// default account.
 const PLACEHOLDER_UID = "None";
 
 class UserFolders {
   /**
-   * Plan the per-user folders an import should create.
-   *
-   * The default selection is the accounts the source actually carries data for,
-   * falling back to the accounts the record claims. That is already the union
-   * the plan calls for: the accounts both claimed and supplied are a subset of
-   * the accounts supplied.
-   * @param {object} cand - World candidate.
-   * @param {object} cand.levelId - Effective level id.
-   * @param {object} cand.record - Source record, or null.
-   * @param {object} cand.usersPresent - Account id mapped to source folder.
-   * @param {GameLayout} layout - Target layout.
-   * @param {object} [opts] - Options.
-   * @param {string[]} [opts.add] - Account ids to add explicitly.
-   * @param {string[]} [opts.remove] - Account ids to drop.
-   * @param {string} [opts.mode] - "copy" copies source contents, "empty" only creates.
-   * @returns {{create: object[], skipped: object[], warnings: string[]}}
+   * List the accounts the client already knows about on this machine.
+   * @param {GameLayout} layout - Resolved game layout.
+   * @returns {Promise<string[]>}
    */
-  static plan(cand, layout, opts) {
-    var options = opts || {}
-      , present = Object.keys(cand.usersPresent || {})
-      , claimed = WorldRecord.userIds(cand.record)
-      , explicit = options.add || []
-      , selected = new Set(present.length > 0 ? present : claimed)
-      , create = []
-      , skipped = []
-      , warnings = [];
+  static async listKnownAccounts(layout) {
+    return Fsx.listDirs(layout.users)
+  }
 
-    for (var uid of explicit)
-      selected.add(uid);
+  /**
+   * Read the account that was active most recently.
+   *
+   * This is the natural default for an import: a world brought in from another
+   * machine has to be attached to an account here before the client lists it.
+   * @param {GameLayout} layout - Resolved game layout.
+   * @returns {Promise<string|null>}
+   */
+  static async lastUserId(layout) {
+    var parsed = await Fsx.readJsonLenient(layout.lastUserIdFile);
 
-    for (var uid of options.remove || [])
-      selected.delete(uid);
+    if (parsed && typeof parsed.last_user_id === "string")
+      return parsed.last_user_id
 
-    for (var uid of selected) {
-      if (!GameLayout.isSafeSegment(uid)) {
-        skipped.push({ uid: uid, reason: "not usable as a folder name" });
+    return null
+  }
+
+  /**
+   * Read the once-per-import account information.
+   *
+   * Both lookups touch the whole users directory, so they are done once and
+   * shared across every world in a batch rather than per world.
+   * @param {GameLayout} layout - Target layout.
+   * @returns {Promise<{known: string[], active: string|null}>}
+   */
+  static async context(layout) {
+    return {
+      known: await UserFolders.listKnownAccounts(layout),
+      active: await UserFolders.lastUserId(layout)
+    }
+  }
+
+  /**
+   * Build the account choices one world contributes.
+   *
+   * Account folders themselves are not managed: only the record's user_ids map
+   * is written, so the origin of each suggestion is reported rather than acted
+   * on.
+   * @param {object} candidate - World candidate from the detector.
+   * @param {object|null} candidate.record - Source registry entry.
+   * @param {object} [candidate.usersPresent] - Accounts with a folder in the source.
+   * @param {object} ctx - Context from context().
+   * @returns {{candidates: object[], selected: string[]}}
+   */
+  static suggest(candidate, ctx) {
+    var known = ctx.known
+      , active = ctx.active
+      , fromRecord = WorldRecord.userIds(candidate.record)
+      , fromSource = Object.keys(candidate.usersPresent || {})
+      , seen = new Set()
+      , candidates = [];
+
+    // The active account leads, then the accounts the source itself names, then
+    // whatever else the client knows about on this machine.
+    var ordered = active ? [active].concat(fromRecord, fromSource, known)
+      : fromRecord.concat(fromSource, known);
+
+    for (var uid of ordered) {
+      if (seen.has(uid))
         continue
-      }
 
-      if (uid === PLACEHOLDER_UID && !explicit.includes(uid)) {
-        skipped.push({ uid: uid, reason: "placeholder account, not created unless requested" });
-        continue
-      }
-
-      var srcDir = (cand.usersPresent || {})[uid] || null;
-
-      create.push({
+      seen.add(uid);
+      candidates.push({
         uid: uid,
-        srcDir: srcDir,
-        destDir: layout.userWorldDir(uid, cand.levelId),
-        mode: srcDir && options.mode !== "empty" ? "copy" : "empty"
+        active: uid === active,
+        inRecord: fromRecord.includes(uid),
+        inSource: fromSource.includes(uid),
+        hasFolder: known.includes(uid)
       });
     }
 
-    return { create: create, skipped: skipped, warnings: warnings }
+    // Without an active account the source's own accounts are the only sensible
+    // starting point.
+    var selected = active ? [active] : fromRecord.slice();
+
+    return { candidates: candidates, selected: selected }
   }
 
   /**
-   * Create the planned per-user folders.
-   *
-   * Failures here are deliberately non-fatal: the world itself is already
-   * published by this point, and a locked per-user config file must not undo a
-   * good import.
-   * @param {object} plan - Plan produced by plan().
-   * @param {object} [opts] - Options.
-   * @param {AbortSignal} [opts.signal] - Cancellation signal.
-   * @returns {Promise<{created: string[], copied: string[], warnings: string[]}>}
+   * Describe where a candidate account came from, for display.
+   * @param {object} entry - Candidate entry from suggest().
+   * @returns {string}
    */
-  static async execute(plan, opts) {
-    var options = opts || {}
-      , created = []
-      , copied = []
-      , warnings = [];
+  static describe(entry) {
+    var parts = [];
 
-    for (var step of plan.create) {
-      try {
-        await Fsx.mkdirp(step.destDir);
-        created.push(step.uid);
-      } catch (e) {
-        warnings.push(`account ${step.uid}: ${e.message}`);
-        continue
-      }
+    if (entry.active)
+      parts.push("当前账号");
+    if (entry.inRecord)
+      parts.push("来源记录");
+    if (entry.inSource)
+      parts.push("来源目录");
+    if (entry.hasFolder)
+      parts.push("本机已有目录");
 
-      if (step.mode !== "copy" || !step.srcDir)
-        continue
-
-      try {
-        await Fsx.copyTree(step.srcDir, step.destDir, { signal: options.signal });
-        copied.push(step.uid);
-      } catch (e) {
-        // The folder exists, so the world still works; the per-user state is
-        // simply empty for this account.
-        warnings.push(`account ${step.uid}: contents not copied (${e.message})`);
-      }
-    }
-
-    return { created: created, copied: copied, warnings: warnings }
+    return parts.join(" · ") || "手动添加"
   }
 
   /**
-   * Collect the per-user folders an export should carry.
+   * Test whether an account id may be written into a record.
+   * @param {string} uid - Candidate account id.
+   * @returns {boolean}
+   */
+  static isValidId(uid) {
+    return typeof uid === "string"
+      && uid.length > 0
+      && uid.length <= 64
+      && /^[A-Za-z0-9_-]+$/.test(uid)
+      && uid !== PLACEHOLDER_UID
+  }
+
+  /**
+   * Collect the account folders an export should carry.
    *
-   * Only leaf folders named exactly for this world are collected. A user
-   * folder also holds unrelated state such as skin.txt, chat history and a
+   * Only leaf folders named exactly for this world are collected. A user folder
+   * also holds unrelated state such as skin.txt, chat history and a
    * play_with.txt that reaches megabytes in the sample.
    * @param {GameLayout} layout - Resolved game layout.
    * @param {string} levelId - Level id of the world.
@@ -154,25 +173,11 @@ class UserFolders {
   }
 
   /**
-   * Read the account that was active most recently.
-   * @param {GameLayout} layout - Resolved game layout.
-   * @returns {Promise<string|null>}
-   */
-  static async lastUserId(layout) {
-    var parsed = await Fsx.readJsonLenient(layout.lastUserIdFile);
-
-    if (parsed && typeof parsed.last_user_id === "string")
-      return parsed.last_user_id
-
-    return null
-  }
-
-  /**
    * Find accounts whose "continue last world" pointer names a given world.
    *
-   * A re-minted import cannot repair this pointer, because the account policy
-   * only creates folders. Surfacing it lets the caller warn instead of leaving
-   * the user with a resume that silently falls back to the world list.
+   * A re-minted import cannot repair this pointer, because account state is not
+   * managed. Surfacing it lets the caller warn instead of leaving the user with
+   * a resume that silently falls back to the world list.
    * @param {GameLayout} layout - Resolved game layout.
    * @param {string[]} uids - Account ids to inspect.
    * @param {string} levelId - Level id the pointer would have to name.

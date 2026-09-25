@@ -12,10 +12,6 @@ const COLLISION_VALUES = ["导入为副本", "替换现有", "合并账号目录
 const COLLISION_BY_LABEL = { "导入为副本": "copy", "替换现有": "replace", "合并账号目录": "merge" };
 const COLLISION_LABELS = { copy: "导入为副本", replace: "替换现有", merge: "合并账号目录" };
 
-const USERS_MODE_VALUES = ["复制内容", "仅建目录"];
-const USERS_MODE_BY_LABEL = { "复制内容": "copy", "仅建目录": "empty" };
-const USERS_MODE_LABELS = { copy: "复制内容", empty: "仅建目录" };
-
 const YES_NO_VALUES = ["否", "是"];
 
 class SettingsScreen {
@@ -120,13 +116,6 @@ class SettingsScreen {
         values: YES_NO_VALUES
       },
       {
-        id: "usersMode",
-        label: "账号目录写入方式",
-        description: "导入时复制来源内容，或只创建空目录",
-        currentValue: USERS_MODE_LABELS[config.import.usersMode || "copy"] || "复制内容",
-        values: USERS_MODE_VALUES
-      },
-      {
         id: "onCollision",
         label: "同名世界冲突处理",
         description: "导入时目标已存在同名世界或记录的处理方式",
@@ -155,8 +144,6 @@ class SettingsScreen {
       patch = { export: { format: FORMAT_BY_LABEL[label] || "folder" } };
     else if (id === "includeOrphanUsers")
       patch = { export: { includeOrphanUsers: label === "是" } };
-    else if (id === "usersMode")
-      patch = { import: { usersMode: USERS_MODE_BY_LABEL[label] || "copy" } };
     else if (id === "onCollision")
       patch = { import: { onCollision: COLLISION_BY_LABEL[label] || "copy" } };
 

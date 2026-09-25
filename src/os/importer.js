@@ -36,10 +36,7 @@ class WorldImporter {
    * @param {object} [opts] - Options.
    * @param {"copy"|"replace"|"merge"} [opts.onCollision] - Collision policy.
    * @param {string[]} [opts.select] - Level ids to import, defaults to all.
-   * @param {string[]} [opts.userIds] - Accounts to write into the records.
-   * @param {string[]} [opts.addUsers] - Accounts to create beyond the default.
-   * @param {string[]} [opts.removeUsers] - Accounts to drop.
-   * @param {string} [opts.usersMode] - "copy" or "empty".
+   * @param {string[]} [opts.userIds] - Accounts to record, or undefined to keep the source's.
    * @returns {Promise<object>} Import plan.
    */
   static async plan(layout, source, opts) {
@@ -127,14 +124,8 @@ class WorldImporter {
       userIds: options.userIds
     });
 
-    var users = UserFolders.plan(
-      { levelId: destId, record: candidate.record, usersPresent: candidate.usersPresent },
-      layout,
-      { add: options.addUsers, remove: options.removeUsers, mode: options.usersMode }
-    );
-
-    warnings.push(...users.warnings);
-
+    // Account folders are not created: the selected accounts are written into
+    // the record's user_ids, and that map is what the client reads.
     var size = worldPresent ? await Fsx.du(candidate.worldDir) : { files: 0, bytes: 0 };
 
     // A re-minted id cannot be pushed into the read-only account state, so the
@@ -155,7 +146,6 @@ class WorldImporter {
       record: built.record,
       synthesized: built.synthesized,
       notes: built.notes,
-      users: users,
       levelMeta: levelMeta,
       size: size,
       warnings: warnings
@@ -312,10 +302,10 @@ class WorldImporter {
   /**
    * Run an import.
    *
-   * Each world is staged, published with a single rename, given its account
-   * folders, and registered last. Writing the record last means any
-   * interruption leaves an unregistered folder, which the world list can see
-   * and repair, rather than a record pointing at nothing.
+   * Each world is staged, published with a single rename, then registered.
+   * Writing the record last means any interruption leaves an unregistered
+   * folder, which the world list can see and repair, rather than a record
+   * pointing at nothing.
    * @param {object} plan - Import plan.
    * @param {object} [opts] - Options.
    * @param {AbortSignal} [opts.signal] - Cancellation signal.
@@ -411,11 +401,8 @@ class WorldImporter {
         published = true;
       }
 
-      // Phase 3: account folders. Failures here are non-fatal by design.
-      var users = await UserFolders.execute(step.users, { signal: options.signal });
-      warnings.push(...users.warnings);
-
-      // Phase 4: the record, last of all.
+      // Phase 3: the record, last of all. There is no account folder phase:
+      // the selected accounts live in the record's user_ids and nothing else.
       recordAside = await Fsx.renameAside(destRecord);
       await WorldRecord.write(layout, step.destId, step.record);
       recordWritten = true;
@@ -443,8 +430,7 @@ class WorldImporter {
       record: step.record,
       bytes: step.size.bytes,
       files: step.size.files,
-      users: step.users.create.map(u => u.uid),
-      usersOmitted: step.users.skipped.map(u => u.uid),
+      userIds: WorldRecord.userIds(step.record),
       synthesized: step.synthesized,
       warnings: warnings
     }

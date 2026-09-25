@@ -38,7 +38,6 @@ class WorldExporter {
    * @param {string} [opts.name] - Override for the package name.
    * @param {boolean} [opts.includeUsers] - Collect per-user folders, default true.
    * @param {boolean} [opts.includeOrphanUsers] - Also collect folders no record claims.
-   * @param {string} [opts.usersMode] - "copy" or "empty".
    * @param {AbortSignal} [opts.signal] - Cancellation signal.
    * @param {function(object): void} [opts.onProgress] - Progress callback.
    * @returns {Promise<object>} Export report.

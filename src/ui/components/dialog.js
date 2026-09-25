@@ -21,7 +21,8 @@ class Dialog {
    * @param {string[]} [opts.lines] - Body lines.
    * @param {string} [opts.hint] - Hint shown under the body.
    * @param {string} [opts.requireText] - Text the user must type to confirm.
-   * @param {string} [opts.placeholder] - Placeholder for the confirmation input.
+   * @param {boolean} [opts.freeInput] - Show an input that accepts any value.
+   * @param {string} [opts.placeholder] - Placeholder for the input.
    * @param {function(boolean, string): void} opts.done - Called once with the outcome.
    */
   constructor(opts) {
@@ -32,7 +33,11 @@ class Dialog {
     this.done = opts.done;
     this.settled = false;
 
-    this.input = this.requireText === null ? null : new Input({ placeholder: opts.placeholder || "" });
+    // An input appears when a value is wanted, either as a typed confirmation
+    // that has to match or as free text.
+    this.input = (this.requireText !== null || opts.freeInput)
+      ? new Input({ placeholder: opts.placeholder || "" })
+      : null;
 
     if (this.input)
       this.input.onSubmit = () => this.confirm();

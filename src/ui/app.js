@@ -243,6 +243,28 @@ class App {
   }
 
   /**
+   * Ask the user for a line of text.
+   * @param {string} title - Dialog title.
+   * @param {string[]} lines - Body lines.
+   * @param {string} [placeholder] - Input placeholder.
+   * @returns {Promise<string|null>} Entered text, or null when cancelled or blank.
+   */
+  async prompt(title, lines, placeholder) {
+    var result = await this.ask({
+      title: title,
+      lines: lines,
+      freeInput: true,
+      placeholder: placeholder || "",
+      hint: "Enter 确认 · Esc 取消"
+    });
+
+    if (!result.ok)
+      return null
+
+    return result.value.trim() || null
+  }
+
+  /**
    * Ask the user to confirm a destructive action by typing a phrase.
    * @param {string} title - Dialog title.
    * @param {string[]} lines - Body lines.

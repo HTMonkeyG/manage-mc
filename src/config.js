@@ -17,8 +17,7 @@ const DEFAULTS = {
   export: {
     format: "folder",
     includeUsers: true,
-    includeOrphanUsers: false,
-    usersMode: "copy"
+    includeOrphanUsers: false
   },
   import: {
     onCollision: "copy",

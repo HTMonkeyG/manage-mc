@@ -57,6 +57,27 @@ installation, so a world moved between machines does not keep pointing at the
 machine it came from. A world whose id already exists is imported as a copy
 under a newly minted id.
 
+### Choosing accounts
+
+After the source is recognised, a picker asks which accounts the imported
+worlds should be attached to. The answer is written into each record's
+`user_ids` map as `account: timestamp`.
+
+- The **active account** (`storage/stream/users/last_user_id`) is selected by
+  default, since a world brought from another machine has to be attached to an
+  account here before the client lists it.
+- Other candidates are the accounts the source record names and the accounts
+  this machine already knows about. Each row says where it came from.
+- `Space` toggles, `a` adds an account by hand, `Enter` continues, `Esc`
+  abandons the import.
+- A timestamp already present in the source record is carried over untouched;
+  a newly added account gets the current time. Selecting nothing writes an
+  empty `user_ids`.
+
+Only the record is written. Account folders
+(`storage/stream/users/<uid>/<world>/`) are **not** created or modified by an
+import — the client builds them itself on first launch.
+
 ### Export layout
 
 An export is a partial game root, so it can be read by hand as well as
@@ -96,10 +117,12 @@ is:
   `RandomSeed` and similar fields, but never writes the file. Note that
   `record.name` and `level.dat`'s `LevelName` are different values with
   different purposes, so they are deliberately not synchronised.
-- Re-importing a world under a new id cannot update `users/<uid>/last_play_data`,
-  the client's "continue last world" pointer, because only account folder names
-  are managed. The import reports which accounts are affected; the client falls
-  back to the world list for them.
+- Account state is not managed: an import writes the record's `user_ids` and
+  nothing else. So re-importing a world under a new id cannot update
+  `users/<uid>/last_play_data`, the client's "continue last world" pointer. The
+  import reports which accounts are affected; the client falls back to the world
+  list for them. Export is the mirror image — it collects the per-account world
+  folders that already exist, so a world carrying account state keeps it.
 - Addons and resource packs referenced by a record live outside the world folder
   (`resource_management/addon_records`, `addon_location`), so they are not
   carried by an export and a world moved between machines may be missing them.
