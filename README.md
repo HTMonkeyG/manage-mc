@@ -15,8 +15,8 @@ npm install
 npm start
 ```
 
-Requires Node 22.19 or newer. `adm-zip` is only needed for zip import and
-export; folder import and export work without it.
+Requires Node 22.19 or newer. `npm install` pulls in `adm-zip`, which is used
+for zip import and export; folder import and export use no external library.
 
 ## Usage
 

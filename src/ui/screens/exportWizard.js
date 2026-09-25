@@ -5,7 +5,6 @@ const { Container, Input, Spacer, Text, Key, matchesKey } = require("@earendil-w
 
 const Config = require("../../config");
 const Fsx = require("../../os/fsx");
-const Pack = require("../../os/pack");
 const WorldExporter = require("../../os/exporter");
 const Theme = require("../theme");
 const InfoPanel = require("../components/infoPanel");
@@ -76,8 +75,7 @@ class ExportWizardScreen {
   async mount(app) {
     this.app = app;
 
-    var format = app.config.export.format
-      , zipReady = Pack.available();
+    var format = app.config.export.format;
 
     this.input.setValue(app.config.lastExportDir || "");
     this.input.onSubmit = value => this.start(value);
@@ -101,8 +99,8 @@ class ExportWizardScreen {
     rows.push({ section: "格式" });
     rows.push({ text: `  当前：${format === "zip" ? "zip 压缩包" : "文件夹"}（可在设置中修改）` });
 
-    if (format === "zip" && !zipReady)
-      rows.push({ text: Theme.chalk.red("  ! 未安装 adm-zip，zip 不可用。请运行：npm install adm-zip") });
+    if (format === "zip")
+      rows.push({ text: Theme.chalk.dim("  zip 会在内存中组装，超大世界建议改用文件夹格式。") });
 
     rows.push({ section: "说明" });
     rows.push({ text: Theme.chalk.dim("  包内为 minecraftWorlds、storage/stream 与 manifest.json。") });
@@ -161,11 +159,6 @@ class ExportWizardScreen {
 
     var dest = RootSetupScreen.expand(value)
       , format = this.app.config.export.format === "zip" ? "zip" : "folder";
-
-    if (format === "zip" && !Pack.available()) {
-      this.app.setStatus("未安装 adm-zip，无法导出为 zip。请运行 npm install adm-zip", "error");
-      return
-    }
 
     if (!(await Fsx.existsDir(dest))) {
       var create = await this.app.confirm("目标目录不存在", [

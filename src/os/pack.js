@@ -1,48 +1,22 @@
 const path = require("path");
 
+const AdmZip = require("adm-zip");
+
 const Fsx = require("./fsx");
 
 // Zip entries always use forward slashes, and a trailing slash marks a
 // directory entry.
 const ZIP_SEPARATOR = "/";
 
-/**
- * Load adm-zip, which is an optional dependency.
- *
- * Folder export works without it, so the failure is deferred until a zip is
- * actually requested rather than blocking startup.
- * @returns {Function} The adm-zip constructor.
- */
-function loadAdmZip() {
-  try {
-    return require("adm-zip")
-  } catch (e) {
-    var err = new Error("Zip support needs the adm-zip package. Install it with: npm install adm-zip");
-    err.code = "ENOZIP";
-    throw err
-  }
-}
-
 class Pack {
-  /**
-   * Report whether zip support is available.
-   * @returns {boolean}
-   */
-  static available() {
-    try {
-      require.resolve("adm-zip");
-      return true
-    } catch (e) {
-      return false
-    }
-  }
-
   /**
    * Pack a directory into a zip archive.
    *
-   * Empty directories are written explicitly: adm-zip's folder helper drops
-   * them, and a per-user world folder is frequently empty, so relying on it
-   * would silently lose part of the package.
+   * Entries are added one at a time from a walk rather than through
+   * addLocalFolder, because that helper drops empty directories and a per-user
+   * world folder is frequently empty. addLocalFile is used for files and
+   * directories alike: it appends the trailing separator for a directory and
+   * carries the modification time across.
    * @param {string} srcDir - Directory to pack.
    * @param {string} zipPath - Archive to create.
    * @param {object} [opts] - Options.
@@ -52,7 +26,6 @@ class Pack {
    */
   static async zipDirectory(srcDir, zipPath, opts) {
     var options = opts || {}
-      , AdmZip = loadAdmZip()
       , warnings = []
       , zip = new AdmZip()
       , walk = await Fsx.walkTree(srcDir, { signal: options.signal });
@@ -70,10 +43,7 @@ class Pack {
       var name = entry.rel.split("/").join(ZIP_SEPARATOR)
         , folder = path.posix.dirname(name);
 
-      if (entry.dir)
-        zip.addFile(name + ZIP_SEPARATOR, Buffer.alloc(0));
-      else
-        zip.addLocalFile(entry.abs, folder === "." ? "" : folder, path.posix.basename(name));
+      zip.addLocalFile(entry.abs, folder === "." ? "" : folder, path.posix.basename(name));
 
       done++;
 
@@ -96,12 +66,7 @@ class Pack {
         warnings.push(`entry name is not valid UTF-8: ${written.entryName}`);
 
     await Fsx.mkdirp(path.dirname(zipPath));
-
-    // Only newer adm-zip releases expose the promise form of writeZip.
-    if (typeof zip.writeZipPromise === "function")
-      await zip.writeZipPromise(zipPath, { overwrite: true });
-    else
-      zip.writeZip(zipPath);
+    await zip.writeZipPromise(zipPath, { overwrite: true });
 
     return {
       files: walk.files,
@@ -122,8 +87,7 @@ class Pack {
    * @returns {Promise<{entries: number, warnings: string[]}>}
    */
   static async unzipTo(zipPath, destDir) {
-    var AdmZip = loadAdmZip()
-      , warnings = []
+    var warnings = []
       , zip = new AdmZip(zipPath)
       , root = path.resolve(destDir);
 

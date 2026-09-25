@@ -52,9 +52,6 @@ class WorldExporter {
     if (!(await Fsx.existsDir(destDir)))
       throw new Error(`Destination folder does not exist: ${destDir}`);
 
-    if (format === "zip" && !Pack.available())
-      throw new Error("Zip support needs the adm-zip package. Install it with: npm install adm-zip");
-
     var name = WorldExporter.packageName(layout, entries, options.name)
       , packageRoot = path.join(destDir, name)
       , zipPath = format === "zip" ? `${packageRoot}.zip` : null

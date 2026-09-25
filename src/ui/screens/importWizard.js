@@ -95,7 +95,7 @@ class ImportWizardScreen {
       { text: "  单个世界目录（含 level.dat）" },
       { text: "  minecraftWorlds 目录，或完整游戏数据目录" },
       { text: "  仅含注册表的 storage/storge 目录" },
-      { text: "  zip 压缩包（需安装 adm-zip）" },
+      { text: "  zip 压缩包" },
       { section: "说明" },
       { text: Theme.chalk.dim("  记录中的 path 会按目标机器重新计算，不会沿用来源机器的路径。") },
       { text: Theme.chalk.dim("  同名世界默认以副本方式导入，会分配新的 level_id。") },

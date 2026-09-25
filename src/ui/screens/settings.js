@@ -104,7 +104,7 @@ class SettingsScreen {
       {
         id: "exportFormat",
         label: "导出格式",
-        description: "zip 需要安装 adm-zip；超大世界建议使用文件夹",
+        description: "zip 在内存中组装，超大世界建议使用文件夹",
         currentValue: FORMAT_LABELS[config.export.format] || "文件夹",
         values: FORMAT_VALUES
       },

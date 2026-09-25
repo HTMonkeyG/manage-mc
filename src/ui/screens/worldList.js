@@ -1,4 +1,4 @@
-const { SelectList, Key, matchesKey } = require("@earendil-works/pi-tui");
+const { SelectList, matchesKey } = require("@earendil-works/pi-tui");
 
 const WorldRegistry = require("../../records/registry");
 const Theme = require("../theme");
