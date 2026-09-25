@@ -1,0 +1,37 @@
+{
+  "name": "@htmonkeyg/manage-mc",
+  "version": "0.1.0",
+  "description": "A Minecraft Netease Edition world manager.",
+  "keywords": [
+    "mcpe",
+    "mcne",
+    "minecraft",
+    "netease",
+    "leveldb"
+  ],
+  "homepage": "https://github.com/HTMonkeyG/manage-mc#readme",
+  "bugs": {
+    "url": "https://github.com/HTMonkeyG/manage-mc/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/HTMonkeyG/manage-mc.git"
+  },
+  "license": "MIT",
+  "author": "HTMonkeyG",
+  "type": "commonjs",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "node src/main.js"
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "dependencies": {
+    "@earendil-works/pi-tui": "^0.87.1",
+    "adm-zip": "^0.6.1",
+    "chalk": "^6.0.0",
+    "parsenbt-js": "^4.0.0",
+    "project-mirror-registry": "^2.0.0"
+  }
+}
