@@ -1,12 +1,45 @@
-const { SelectList, matchesKey } = require("@earendil-works/pi-tui");
+const { SelectList, matchesKey, visibleWidth, truncateToWidth } = require("@earendil-works/pi-tui");
 
 const WorldRegistry = require("../../records/registry");
 const Theme = require("../theme");
 
-// Only these states carry world data on this machine.
-const EXPORTABLE = ["registered", "unregistered", "online"];
-
 const HINT = "Enter 详情 · i 导入 · e 导出 · E 导出全部 · p 注册 · r 刷新 · s 设置 · q 退出";
+
+// The name column adapts to its content within these bounds.
+const PRIMARY_MIN = 20;
+const PRIMARY_MAX = 48;
+
+// A trailing " [状态]" badge, which must never be the part that gets cut.
+const BADGE_RE = /\s+\[[^\]]*\]$/;
+
+/**
+ * Truncate a list row, keeping the trailing state badge whole.
+ *
+ * SelectList's own truncation cuts with an empty ellipsis, so a long world name
+ * silently slices the badge in half and the row reads as broken. Cutting the
+ * name instead, and marking it with an ellipsis, keeps both readable.
+ * @param {object} context - Truncation context from SelectList.
+ * @returns {string}
+ */
+function truncateRow(context) {
+  var text = context.text
+    , badge = text.match(BADGE_RE)
+    , suffix = badge ? ` ${badge[0].trim()}` : ""
+    , room = context.maxWidth - visibleWidth(suffix);
+
+  if (!badge || room <= 1)
+    return truncateToWidth(text, context.maxWidth, "…")
+
+  var name = text.slice(0, text.length - badge[0].length);
+
+  return truncateToWidth(name, room, "…") + suffix
+}
+
+const LIST_LAYOUT = {
+  minPrimaryColumnWidth: PRIMARY_MIN,
+  maxPrimaryColumnWidth: PRIMARY_MAX,
+  truncatePrimary: truncateRow
+};
 
 class WorldListScreen {
   /**
@@ -74,7 +107,9 @@ class WorldListScreen {
    * @returns {void}
    */
   rebuild() {
-    this.registry = this.app.entries || [];
+    // Re-ordering here rather than only in the registry means a change to the
+    // sort setting shows up as soon as the list is shown again.
+    this.registry = WorldRegistry.sortEntries(this.app.entries || [], this.app.config.ui.worldSort);
 
     this.items = this.registry.map(entry => ({
       value: entry.levelId,
@@ -83,7 +118,7 @@ class WorldListScreen {
     }));
 
     if (!this.list) {
-      this.list = new SelectList(this.items, WorldListScreen.visibleRows(), Theme.selectList());
+      this.list = new SelectList(this.items, WorldListScreen.visibleRows(), Theme.selectList(), LIST_LAYOUT);
       this.list.onSelect = item => this.openDetail(item.value);
 
       // Escape deliberately does nothing here. There is no level above the
@@ -126,22 +161,17 @@ class WorldListScreen {
    * Build the secondary column for an entry.
    *
    * State is written as text rather than colour because SelectList styles the
-   * whole selected row, which would override a nested colour.
+   * whole selected row, which would override a nested colour. Account detail
+   * lives on the detail screen; the list shows when the world was last played,
+   * which is the thing worth scanning for.
    * @param {object} entry - World entry.
    * @returns {string}
    */
   static describeOf(entry) {
-    var parts = []
+    var parts = [Theme.playedAt(entry.lastPlayed)]
 
     if (entry.size)
       parts.push(`${Theme.size(entry.size.bytes)}`)
-
-    var accounts = Object.keys(entry.usersPresent).length;
-
-    if (entry.userIds.length > 0)
-      parts.push(`${entry.userIds.length} 账号`)
-    else if (accounts > 0)
-      parts.push(`${accounts} 账号目录`)
 
     if (entry.state === "online")
       parts.push("仅注册表")

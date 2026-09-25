@@ -174,6 +174,17 @@ class WorldDetailScreen {
         : (entry.worldDir ? Theme.chalk.dim("统计中…") : Theme.chalk.dim("—"))
     });
 
+    // level.dat holds the real figure; the account timestamps are only a lower
+    // bound, so which one answered is worth saying.
+    var fromLevelDat = Boolean(entry.levelMeta && entry.levelMeta.lastPlayed);
+
+    rows.push({
+      key: "最近游玩",
+      value: entry.lastPlayed
+        ? `${Theme.time(entry.lastPlayed)}${fromLevelDat ? "" : Theme.chalk.dim("（据账号记录，非精确值）")}`
+        : Theme.chalk.dim("—")
+    });
+
     if (this.dbState)
       rows.push(...this.databaseRows());
 
@@ -320,23 +331,31 @@ class WorldDetailScreen {
       , present = Object.keys(entry.usersPresent);
 
     if (claimed.length === 0 && present.length === 0) {
-      rows.push({ text: Theme.chalk.dim("  （无）") });
+      rows.push({ key: "账号数", value: Theme.chalk.dim("0") });
+      rows.push({ text: Theme.chalk.dim("  记录未声明任何账号，本机也没有对应的账号目录。") });
       return rows
     }
 
+    rows.push({
+      key: "账号数",
+      value: `${claimed.length} 个记录在案 · ${present.length} 个在本机有目录`
+    });
+
     for (var uid of claimed) {
-      var lastPlayed = entry.record.user_ids[uid]
+      var stamp = entry.record.user_ids[uid]
         , folder = entry.usersPresent[uid];
 
       rows.push({
         key: uid,
-        value: `${Theme.time(lastPlayed)} · ${folder ? "目录已存在" : Theme.chalk.dim("无目录")}`
+        value: `${Theme.time(stamp)} · ${folder ? "目录已存在" : Theme.chalk.dim("无目录")}`
       });
     }
 
     for (var uid of present)
       if (!claimed.includes(uid))
         rows.push({ key: uid, value: Theme.chalk.yellow("目录存在但记录未声明") });
+
+    rows.push({ text: Theme.chalk.dim("  记录中的时间是该账号的登记时间，不是游玩时间。") });
 
     return rows
   }

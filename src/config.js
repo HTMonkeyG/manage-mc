@@ -27,7 +27,10 @@ const DEFAULTS = {
     synthesizeRecord: true
   },
   ui: {
-    confirmDestructive: true
+    confirmDestructive: true,
+    // How the world list is ordered: "default" groups by state, "time" is
+    // newest played first, "name" is purely alphabetical.
+    worldSort: "default"
   }
 };
 

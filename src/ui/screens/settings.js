@@ -12,6 +12,10 @@ const COLLISION_VALUES = ["导入为副本", "替换现有", "合并账号目录
 const COLLISION_BY_LABEL = { "导入为副本": "copy", "替换现有": "replace", "合并账号目录": "merge" };
 const COLLISION_LABELS = { copy: "导入为副本", replace: "替换现有", merge: "合并账号目录" };
 
+const SORT_VALUES = ["默认排序", "按时间排序", "按名称排序"];
+const SORT_BY_LABEL = { "默认排序": "default", "按时间排序": "time", "按名称排序": "name" };
+const SORT_LABELS = { default: "默认排序", time: "按时间排序", name: "按名称排序" };
+
 const YES_NO_VALUES = ["否", "是"];
 
 class SettingsScreen {
@@ -109,6 +113,13 @@ class SettingsScreen {
         values: FORMAT_VALUES
       },
       {
+        id: "worldSort",
+        label: "存档列表排序",
+        description: "默认：按状态分组（正常的在前）再按名称；按时间：最近游玩的在前；按名称：仅按名称。",
+        currentValue: SORT_LABELS[config.ui.worldSort] || "默认排序",
+        values: SORT_VALUES
+      },
+      {
         id: "decryptWorlds",
         label: "导出时解密数据库",
         description: "推断密钥并解密 db 中的加密文件，密钥写入 manifest；导入时用默认密钥重新加密。关闭则原样复制。",
@@ -153,6 +164,8 @@ class SettingsScreen {
       patch = { export: { includeOrphanUsers: label === "是" } };
     else if (id === "decryptWorlds")
       patch = { export: { decryptWorlds: label === "是" } };
+    else if (id === "worldSort")
+      patch = { ui: { worldSort: SORT_BY_LABEL[label] || "default" } };
     else if (id === "onCollision")
       patch = { import: { onCollision: COLLISION_BY_LABEL[label] || "copy" } };
 

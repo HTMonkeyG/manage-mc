@@ -96,7 +96,13 @@ class App {
       return
     }
 
-    this.entries = await WorldRegistry.build(this.layout, { withMeta: false });
+    // Metadata is read here because the list shows a last played time, and only
+    // level.dat carries the real one. The sort is applied by the registry so
+    // that it sees the same values.
+    this.entries = await WorldRegistry.build(this.layout, {
+      withMeta: true,
+      sort: this.config.ui.worldSort
+    });
   }
 
   /**

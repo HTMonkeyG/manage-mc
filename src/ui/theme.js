@@ -148,6 +148,40 @@ class Theme {
   }
 
   /**
+   * Format a timestamp compactly for a list column.
+   *
+   * The list has one narrow column for this, so the year and even the date are
+   * dropped whenever they can be inferred from how recent the value is.
+   * @param {number|null} seconds - Unix time in seconds.
+   * @returns {string}
+   */
+  static playedAt(seconds) {
+    if (!seconds)
+      return "—"
+
+    var date = new Date(seconds * 1000)
+      , now = new Date()
+      , pad = n => String(n).padStart(2, "0")
+      , clock = `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+
+    // Compare calendar days rather than elapsed hours, so 23:59 and 00:01 read
+    // as different days even though they are minutes apart.
+    var startOfDay = d => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
+      , days = Math.round((startOfDay(now) - startOfDay(date)) / 86400000);
+
+    if (days === 0)
+      return `今天 ${clock}`
+
+    if (days === 1)
+      return `昨天 ${clock}`
+
+    if (date.getFullYear() === now.getFullYear())
+      return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${clock}`
+
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+  }
+
+  /**
    * Theme for SelectList.
    * @returns {object}
    */

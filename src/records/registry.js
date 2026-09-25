@@ -14,6 +14,9 @@ const STATE_ORDER = {
   error: 4
 };
 
+// How the world list may be ordered.
+const SORTS = ["default", "time", "name"];
+
 class WorldRegistry {
   /**
    * Build the world list by outer joining the folder set with the record set.
@@ -23,11 +26,14 @@ class WorldRegistry {
    * holds 25 records against a single folder.
    * @param {GameLayout} layout - Resolved game layout.
    * @param {object} [opts] - Options.
-   * @param {boolean} [opts.withMeta] - Also read level.dat for each world.
+   * @param {boolean} [opts.withMeta] - Also read level.dat for each world, which is
+   *   what supplies a real last played time rather than a record timestamp.
+   * @param {"default"|"time"|"name"} [opts.sort] - Ordering, defaults to "default".
    * @returns {Promise<object[]>} World entries, sorted for display.
    */
   static async build(layout, opts) {
-    var withMeta = Boolean((opts || {}).withMeta)
+    var options = opts || {}
+      , withMeta = Boolean(options.withMeta)
       , folders = await Fsx.listDirs(layout.minecraftWorlds)
       , records = await WorldRecord.list(layout)
       , userIndex = await WorldRegistry.indexUsers(layout)
@@ -75,20 +81,98 @@ class WorldRegistry {
 
       entry.displayName = WorldRegistry.displayNameOf(entry);
       entry.userIds = WorldRecord.userIds(entry.record);
+      entry.lastPlayed = WorldRegistry.lastPlayedOf(entry);
 
       out.push(entry);
     }
 
-    out.sort((a, b) => {
-      var byState = STATE_ORDER[a.state] - STATE_ORDER[b.state];
-
-      if (byState !== 0)
-        return byState
-
-      return a.displayName.localeCompare(b.displayName, "zh-Hans-CN")
-    });
+    WorldRegistry.sortEntries(out, options.sort);
 
     return out
+  }
+
+  /**
+   * Order entries in place.
+   *
+   * Exposed so the list can re-order the entries it already holds when the sort
+   * setting changes, rather than going back to disk for values it already has.
+   * @param {object[]} entries - Entries to reorder.
+   * @param {string} [mode] - "default", "time" or "name".
+   * @returns {object[]} The same array, reordered.
+   */
+  static sortEntries(entries, mode) {
+    return entries.sort(WorldRegistry.comparator(mode))
+  }
+
+  /**
+   * Read the last time a world was played.
+   *
+   * level.dat carries the real figure, so it wins whenever it has been read.
+   * The record's account timestamps are the fallback: they mark when an account
+   * was attached rather than when the world was played, so they are only a
+   * lower bound.
+   * @param {object} entry - World entry.
+   * @returns {number|null} Unix seconds, or null when nothing dates the world.
+   */
+  static lastPlayedOf(entry) {
+    if (entry.levelMeta && typeof entry.levelMeta.lastPlayed === "number" && entry.levelMeta.lastPlayed > 0)
+      return entry.levelMeta.lastPlayed
+
+    var stamps = []
+
+    if (entry.record && entry.record.user_ids && typeof entry.record.user_ids === "object")
+      for (var uid of Object.keys(entry.record.user_ids)) {
+        var value = Number(entry.record.user_ids[uid]);
+
+        if (Number.isFinite(value) && value > 0)
+          stamps.push(value);
+      }
+
+    if (stamps.length === 0)
+      return null
+
+    return Math.max.apply(null, stamps)
+  }
+
+  /**
+   * Build the comparator for a sort mode.
+   * @param {string} [mode] - "default", "time" or "name".
+   * @returns {function(object, object): number}
+   */
+  static comparator(mode) {
+    var byName = (a, b) => a.displayName.localeCompare(b.displayName, "zh-Hans-CN")
+      , byState = (a, b) => STATE_ORDER[a.state] - STATE_ORDER[b.state];
+
+    if (mode === "name")
+      return byName
+
+    if (mode === "time") {
+      // Newest first, and anything undated sinks to the bottom rather than
+      // sorting as if it were from 1970.
+      return (a, b) => {
+        if (a.lastPlayed === null && b.lastPlayed === null)
+          return byState(a, b) || byName(a, b)
+
+        if (a.lastPlayed === null)
+          return 1
+
+        if (b.lastPlayed === null)
+          return -1
+
+        return b.lastPlayed - a.lastPlayed || byName(a, b)
+      }
+    }
+
+    return (a, b) => byState(a, b) || byName(a, b)
+  }
+
+  /**
+   * Test whether a sort mode is one this registry understands.
+   * @param {string} mode - Candidate mode.
+   * @returns {boolean}
+   */
+  static isSortMode(mode) {
+    return SORTS.includes(mode)
   }
 
   /**
