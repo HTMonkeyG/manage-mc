@@ -10,12 +10,17 @@
 
 ## 安装与运行
 
+安装需要 Node 22.19 或更高版本：
+
 ```sh
 npm i @htmonkeyg/manage-mc
 ```
 
-需要 Node 22.19 或更高版本。`npm install` 会引入 `adm-zip`，用于 zip 的导入与
-导出；文件夹形式的导入导出不依赖任何外部库。
+运行输入：
+
+```sh
+mngmc
+```
 
 ## 用法
 
