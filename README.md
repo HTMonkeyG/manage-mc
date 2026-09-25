@@ -1,5 +1,8 @@
 # manage-mc
 
+> 新建存档，删掉里面的内容，然后替换？谁教你这样做的！明明只需要运行mngmc！
+> <p align="right">——HTMonkeyG</p>
+
 一个《我的世界》存档管理器：以全屏终端界面列出、导入和导出游戏数据目录中的存档。面向网易 PC 版且支持将网易版存档的 XOR 加密数据库导出为国际版的未加密数据库（见[加密数据库](#加密数据库)）。
 
 界面基于 [`@earendil-works/pi-tui`](https://www.npmjs.com/package/@earendil-works/pi-tui)，读取 `level.dat` 使用[`parsenbt-js`](https://www.npmjs.com/package/parsenbt-js)，MCBE NBT 模板来自[`project-mirror-registry`](https://www.npmjs.com/package/project-mirror-registry)。
