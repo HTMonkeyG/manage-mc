@@ -1,162 +1,146 @@
 # manage-mc
 
-A Minecraft (NetEase PC edition) world manager: a full-screen terminal UI for
-listing, importing and exporting worlds in a game data folder.
+一个《我的世界》（网易 PC 版）存档管理器：以全屏终端界面列出、导入和导出
+游戏数据目录中的存档。
 
-Built on [`@earendil-works/pi-tui`](https://www.npmjs.com/package/@earendil-works/pi-tui)
-for the interface, [`parsenbt-js`](https://www.npmjs.com/package/parsenbt-js) for
-reading `level.dat`, and [`project-mirror-registry`](https://www.npmjs.com/package/project-mirror-registry)
-for MCBE NBT templates.
+界面基于 [`@earendil-works/pi-tui`](https://www.npmjs.com/package/@earendil-works/pi-tui)，
+读取 `level.dat` 使用
+[`parsenbt-js`](https://www.npmjs.com/package/parsenbt-js)，MCBE NBT 模板来自
+[`project-mirror-registry`](https://www.npmjs.com/package/project-mirror-registry)。
 
-## Install and run
+## 安装与运行
 
 ```sh
 npm i @htmonkeyg/manage-mc
 ```
 
-Requires Node 22.19 or newer. `npm install` pulls in `adm-zip`, which is used
-for zip import and export; folder import and export use no external library.
+需要 Node 22.19 或更高版本。`npm install` 会引入 `adm-zip`，用于 zip 的导入与
+导出；文件夹形式的导入导出不依赖任何外部库。
 
-## Usage
+## 用法
 
-On first run the app asks for the game data folder, then remembers it in
-`~/.manage-mc.json`.
+首次运行时，程序会询问游戏数据目录，之后将其记录在 `~/.manage-mc.json` 中。
 
-| Key | Action |
+| 按键 | 操作 |
 | --- | --- |
-| `Enter` | Open the selected world's details |
-| `i` | Import a world |
-| `e` | Export the selected world |
-| `E` | Export every world that has local data |
-| `p` | Register a world folder that has no registry entry |
-| `r` | Re-read everything from disk |
-| `s` | Settings |
-| `q` | Quit |
+| `Enter` | 打开所选存档的详情 |
+| `i` | 导入存档 |
+| `e` | 导出所选存档 |
+| `E` | 导出所有存在本地数据的存档 |
+| `p` | 为没有注册表条目的存档目录建立注册 |
+| `r` | 从磁盘重新读取全部内容 |
+| `s` | 设置 |
+| `q` | 退出 |
 
-On the detail screen, `↑`/`↓`/`Home`/`End` and the mouse wheel scroll the
-panel, `PageUp`/`PageDown` scroll by a page, `e` exports and `b` goes back —
-returning with the cursor still on the same world.
+在详情界面中，`↑`/`↓`/`Home`/`End` 以及鼠标滚轮用于滚动面板，
+`PageUp`/`PageDown` 按页滚动，`e` 导出，`b` 返回 —— 返回后光标仍停留在原来的
+存档上。
 
-`Esc` always means "go up one level" and never quits: on the detail, import and
-export screens it goes back, and on the world list it does nothing, since there
-is no level above it. `q` and `Ctrl+C` are the only ways to quit.
+`Esc` 始终表示“上一级”，从不退出：在详情、导入和导出界面中它用于返回，而在
+存档列表上它不做任何事，因为列表之上已无层级。`q` 和 `Ctrl+C` 是仅有的退出
+方式。
 
-### Import sources
+### 导入来源
 
-The importer recognises a path by its contents, so any of these work:
+导入器依据内容识别路径，因此以下各类均可用：
 
-- a package produced by this tool (contains `manifest.json`)
-- a single world folder (contains `level.dat`)
-- a `minecraftWorlds` folder, or a whole game data folder
-- a storage folder carrying only the registry
-- a `.zip` of any of the above
+- 本工具生成的包（包含 `manifest.json`）
+- 单个存档目录（包含 `level.dat`）
+- 一个 `minecraftWorlds` 目录，或整个游戏数据目录
+- 仅含注册表的存储目录
+- 上述任意一种的 `.zip` 压缩包
 
-Records are rewritten on import: the `path` field is recomputed for the target
-installation, so a world moved between machines does not keep pointing at the
-machine it came from. A world whose id already exists is imported as a copy
-under a newly minted id.
+导入时会重写记录：`path` 字段会按目标安装位置重新计算，因此跨机器迁移的存档
+不会再指向它原来所在的机器。若某存档的 id 已存在，则会以一个全新生成的 id
+作为副本导入。
 
-### Choosing accounts
+### 选择账号
 
-After the source is recognised, a picker asks which accounts the imported
-worlds should be attached to. The answer is written into each record's
-`user_ids` map as `account: timestamp`.
+识别出来源后，会有一个选择器询问导入的存档应关联到哪些账号。结果会以
+`account: timestamp` 的形式写入每条记录的 `user_ids` 映射。
 
-- The **active account** (`storage/stream/users/last_user_id`) is selected by
-  default, since a world brought from another machine has to be attached to an
-  account here before the client lists it.
-- Other candidates are the accounts the source record names and the accounts
-  this machine already knows about. Each row says where it came from.
-- `Space` toggles, `a` adds an account by hand, `Enter` continues, `Esc`
-  abandons the import.
-- A timestamp already present in the source record is carried over untouched;
-  a newly added account gets the current time. Selecting nothing writes an
-  empty `user_ids`.
+- 默认选中**当前账号**（`storage/stream/users/last_user_id`），因为从其他机器
+  带来的存档必须先关联到本机账号，客户端才会列出它。
+- 其他候选包括来源记录中已有的账号，以及本机已知的账号。每一行都会标明它的
+  来源。
+- `Space` 切换选中，`a` 手动添加账号，`Enter` 继续，`Esc` 放弃导入。
+- 来源记录中已存在的时间戳会原样保留；新添加的账号使用当前时间。若一个都不
+  选，则写入空的 `user_ids`。
 
-Only the record is written. Account folders
-(`storage/stream/users/<uid>/<world>/`) are **not** created or modified by an
-import — the client builds them itself on first launch.
+只写入记录本身。导入**不会**创建或修改账号目录
+（`storage/stream/users/<uid>/<world>/`）—— 客户端会在首次启动时自行创建它们。
 
-### Export layout
+### 导出结构
 
-An export is a partial game root, so it can be read by hand as well as
-reimported:
+一次导出得到的是一份不完整的游戏根目录，因此既能手动查看，也能再次导入：
 
 ```
 <name>/
-  manifest.json                                  what the package contains
-  minecraftWorlds/<level_id>/                    the world, copied byte for byte
+  manifest.json                                  包内包含的内容
+  minecraftWorlds/<level_id>/                    存档，逐字节复制
   storage/stream/resource_management/world_records/<level_id>.json
-  storage/stream/users/<uid>/<level_id>/         per-account folders
+  storage/stream/users/<uid>/<level_id>/         各账号目录
 ```
 
-Import it with this tool rather than copying it into place by hand: the
-`path` field inside the record still names the machine it was exported from,
-and the importer is what rewrites it.
+请用本工具导入，而不要手动复制到位：记录中的 `path` 字段仍指向导出它的那台
+机器，只有导入器会重写它。
 
-## World states
+## 存档状态
 
-The game treats `world_records` as a registry and `minecraftWorlds` as the
-data, and the two do not have to agree. The list shows which case each entry
-is:
+游戏把 `world_records` 当作注册表、把 `minecraftWorlds` 当作数据，二者并不
+必须一致。列表中会标出每一项属于哪种情况：
 
-| State | Meaning |
+| 状态 | 含义 |
 | --- | --- |
-| 正常 (registered) | Folder and registry entry both present |
-| 未注册 (unregistered) | Folder present, no registry entry — the game will not list it until one is written; press `p` to register it |
-| 在线 (online) | Marketplace or rental world; only its registry entry is local |
-| 数据缺失 (dangling) | Registry entry present, folder gone. The common case for a world deleted from disk |
-| 记录损坏 (error) | The registry entry could not be parsed |
+| 正常 (registered) | 目录与注册表条目均存在 |
+| 未注册 (unregistered) | 目录存在但没有注册表条目 —— 在写入条目之前游戏不会列出它；按 `p` 注册 |
+| 在线 (online) | 市场或租赁存档；本地只有它的注册表条目 |
+| 数据缺失 (dangling) | 注册表条目存在但目录已消失。从磁盘删除存档时常见的情况 |
+| 记录损坏 (error) | 注册表条目无法解析 |
 
-## Notes and limitations
+## 说明与限制
 
-- `db/` is LevelDB and is copied as opaque bytes. It is never opened, parsed or
-  compacted.
-- `level.dat` is read-only. The tool displays `LevelName`, `LastPlayed`,
-  `RandomSeed` and similar fields, but never writes the file. Note that
-  `record.name` and `level.dat`'s `LevelName` are different values with
-  different purposes, so they are deliberately not synchronised.
-- Account state is not managed: an import writes the record's `user_ids` and
-  nothing else. So re-importing a world under a new id cannot update
-  `users/<uid>/last_play_data`, the client's "continue last world" pointer. The
-  import reports which accounts are affected; the client falls back to the world
-  list for them. Export is the mirror image — it collects the per-account world
-  folders that already exist, so a world carrying account state keeps it.
-- Addons and resource packs referenced by a record live outside the world folder
-  (`resource_management/addon_records`, `addon_location`), so they are not
-  carried by an export and a world moved between machines may be missing them.
-- A zip is assembled in memory by `adm-zip`; use the folder format for worlds of
-  several hundred megabytes.
+- `db/` 是 LevelDB，会作为不透明的字节复制。它从不被打开、解析或压缩。
+- `level.dat` 只读。本工具会显示 `LevelName`、`LastPlayed`、`RandomSeed` 等
+  字段，但从不写入该文件。注意 `record.name` 与 `level.dat` 的 `LevelName` 是
+  用途不同的两个值，因此有意不做同步。
+- 不管理账号状态：导入只写入记录的 `user_ids`，别的什么都不做。因此以新 id
+  重新导入存档无法更新 `users/<uid>/last_play_data`，即客户端“继续上次存档”的
+  指针。导入会报告受影响的账号；客户端对这些账号会回退到存档列表。导出则正好
+  相反 —— 它收集已存在的各账号存档目录，因此带有账号状态的存档会保留该状态。
+- 记录引用的附加包与资源包存放在存档目录之外
+  （`resource_management/addon_records`、`addon_location`），因此不会被导出
+  带走，跨机器迁移的存档可能会缺失它们。
+- zip 由 `adm-zip` 在内存中组装；对于数百兆字节的存档请使用文件夹格式。
 
-## Layout
+## 目录结构
 
 ```
 src/
-  main.js                 entry point
+  main.js                 入口
   config.js               ~/.manage-mc.json
   os/
-    paths.js              game layout resolution (storage vs storge), path safety
-    fsx.js                tree walking, staged copies, atomic writes
-    pack.js               zip packaging
-    leveldat.js           read-only level.dat parsing
-    detect.js             import source classification
-    importer.js           import planning, preflight and execution
-    exporter.js           export planning and execution
+    paths.js              游戏目录解析（storage 与 storge）、路径安全
+    fsx.js                目录遍历、分阶段复制、原子写入
+    pack.js               zip 打包
+    leveldat.js           只读解析 level.dat
+    detect.js             导入来源分类
+    importer.js           导入的规划、预检与执行
+    exporter.js           导出的规划与执行
   records/
-    levelid.js            level id validation, minting, collision probing
-    record.js             registry entry read and write
-    schema.js             record field rules for imported worlds
-    registry.js           folder/registry outer join and world states
-    users.js              per-account folder planning
+    levelid.js            level id 校验、生成与冲突探测
+    record.js             注册表条目的读写
+    schema.js             导入存档的记录字段规则
+    registry.js           目录/注册表外连接与存档状态
+    users.js              各账号目录的规划
   ui/
-    app.js                terminal shell, screen stack, dialogs
-    theme.js              colours and text measurement
-    components/           header, status bar, info panel, dialog
-    screens/              setup, world list, detail, import, export, settings
+    app.js                终端外壳、界面栈、对话框
+    theme.js              配色与文本宽度测量
+    components/           头部、状态栏、信息面板、对话框
+    screens/              初始化、存档列表、详情、导入、导出、设置
 ```
 
-## Example data
+## 示例数据
 
-`example/MinecraftPC_Netease_PB` is a sample game data folder used for
-development. It is a read-only reference: copy it before experimenting, since
-imports write into the target folder.
+`example/MinecraftPC_Netease_PB` 是用于开发的示例游戏数据目录。它是只读参考：
+试验前请先复制一份，因为导入会写入目标目录。
