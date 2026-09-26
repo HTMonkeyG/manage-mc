@@ -1,4 +1,4 @@
-const { Container, Input, Spacer, Text, Key, matchesKey } = require("@earendil-works/pi-tui");
+const { Container, Input, Spacer, Text } = require("@earendil-works/pi-tui");
 
 const Config = require("../../config");
 const Fsx = require("../../os/fsx");
@@ -62,7 +62,7 @@ class ImportWizardScreen {
    * @returns {string}
    */
   hint() {
-    return "输入来源路径后按 Enter 识别 · Esc 返回"
+    return "输入来源路径后按 Enter 识别 · Esc/Ctrl+C 返回"
   }
 
   /**
@@ -80,7 +80,7 @@ class ImportWizardScreen {
    */
   async mount(app) {
     this.app = app;
-    this.input.setValue(app.config.lastImportPath || "");
+    this.input.setValue("");
     this.input.onSubmit = value => this.start(value);
 
     this.container.addChild(new Text("选择要导入的存档来源。", 0, 0));
@@ -97,6 +97,7 @@ class ImportWizardScreen {
       { text: "  仅含注册表的 storage/storge 目录" },
       { text: "  zip 压缩包" },
       { section: "说明" },
+      { text: Theme.chalk.dim("  可以拖放文件夹/压缩包到终端。") },
       { text: Theme.chalk.dim("  记录中的 path 会按目标机器重新计算，不会沿用来源机器的路径。") },
       { text: Theme.chalk.dim("  同名世界默认以副本方式导入，会分配新的 level_id。") },
       { text: Theme.chalk.dim("  导入时会选择账号，写入记录的 user_ids；不会创建账号目录。") }
@@ -110,22 +111,24 @@ class ImportWizardScreen {
    * @param {string} data - Raw key data.
    * @returns {object|undefined} Consume result.
    */
-  handleKey(data) {
-    // Matched, not compared: Escape arrives as \x1b or \x1b[27u depending on
-    // the terminal, and every other key belongs to the focused path input.
-    if (matchesKey(data, Key.escape)) {
-      this.back();
-      return { consume: true }
-    }
-
-    return undefined
-  }
-
   /**
-   * Return to the previous screen.
+   * Leave this screen, as Escape and Ctrl+C both ask for.
+   *
+   * A run in progress is aborted rather than merely hidden: the importer removes
+   * its staging directory and rolls back when its signal fires, so the target
+   * is left as it was.
    * @returns {Promise<void>}
    */
-  async back() {
+  async cancel() {
+    if (this.abort) {
+      this.app.setStatus("正在取消导入…", "warn");
+      this.abort.abort();
+      return
+    }
+
+    if (this.busy)
+      return
+
     if (this.onDone)
       await this.onDone()
   }
@@ -300,10 +303,6 @@ class ImportWizardScreen {
       this.app.setStatus("未找到候选账号，可按 a 手动添加", "warn");
     }
 
-    var worldLabel = source.worlds.length === 1
-      ? (source.worlds[0].displayName || source.worlds[0].levelId)
-      : `${source.worlds.length} 个世界`;
-
     return new Promise(resolve => {
       var picker = new AccountPicker({
         app: this.app,
@@ -316,7 +315,8 @@ class ImportWizardScreen {
         }
       });
 
-      var handle = this.app.tui.showOverlay(picker, {
+      // Shown through the shell so a Ctrl+C delivered as a signal can reach it.
+      var handle = this.app.showModal(picker, {
         width: "76%",
         minWidth: 44,
         maxHeight: "80%",
@@ -335,8 +335,11 @@ class ImportWizardScreen {
   async run(plan, source, resolved) {
     var report;
 
+    this.abort = new AbortController();
+
     try {
       report = await this.app.withProgress("正在导入…", progress => WorldImporter.execute(plan, {
+        signal: this.abort.signal,
         onProgress: progress
       }));
     } catch (e) {
@@ -348,6 +351,10 @@ class ImportWizardScreen {
       this.app.setStatus(`导入失败：${e.message}`, "error");
       await this.app.alert("导入失败", [e.message, "", "已尽可能回滚；未登记的世界目录会在列表中显示为「未注册」，可用 p 键登记。"]);
       return
+    } finally {
+      // Cleared before any return above takes effect, so cancel() falls back to
+      // leaving the screen once the run is over.
+      this.abort = null;
     }
 
     await this.app.reloadWorlds();

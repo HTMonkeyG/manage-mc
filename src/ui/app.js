@@ -11,6 +11,10 @@ const Dialog = require("./components/dialog");
 const APP_TITLE = "Minecraft 存档管理器";
 const PROGRESS_THROTTLE_MS = 100;
 
+// Two deliveries of one Ctrl+C arrive within a few milliseconds of each other.
+// Well above that, and still far below the gap between two deliberate presses.
+const INTERRUPT_DEDUPE_MS = 120;
+
 class App {
   /**
    * Application shell: owns the terminal, the layout root and the screen stack.
@@ -25,26 +29,121 @@ class App {
     this.entries = [];
     this.screen = null;
     this.quitting = false;
+    this.modal = null;
+    this.signalHandler = null;
+    this.lastInterruptAt = 0;
 
     this.header = new HeaderBar();
     this.status = new StatusBar();
 
     this.header.set(APP_TITLE, "");
 
-    // Ctrl+C is registered on the TUI rather than on a component, because an
-    // overlay holding focus would otherwise swallow it.
+    // Both cancel gestures are registered on the TUI rather than on a
+    // component, because an overlay holding focus would otherwise swallow them.
+    // Routing them here keeps one rule for the whole application instead of a
+    // clause in every screen.
     this.tui.addInputListener(data => {
-      if (matchesKey(data, Key.ctrl("c"))) {
-        this.quit();
-        return { consume: true }
-      }
-
-      // Screen level hotkeys must not fire underneath a modal.
+      // A modal owns the keyboard, cancel gestures included: it decides for
+      // itself what Escape and Ctrl+C mean while it is open.
       if (this.tui.hasOverlay())
         return undefined
 
-      return this.screen && this.screen.handleKey ? this.screen.handleKey(data) : undefined
+      var isEscape = matchesKey(data, Key.escape)
+        , isQuit = matchesKey(data, Key.ctrl("c"));
+
+      if (!isEscape && !isQuit)
+        return this.screen && this.screen.handleKey ? this.screen.handleKey(data) : undefined
+
+      if (isQuit)
+        this.handleInterrupt();
+      else
+        this.cancelScreen();
+
+      return { consume: true }
     });
+
+    // Raw mode normally turns Ctrl+C into an ordinary key press, but a terminal
+    // that still delivers the signal would kill the process outright and skip
+    // the rule above entirely. Handling the signal keeps both delivery paths
+    // behaving the same. They cannot both fire for one press: the signal only
+    // exists when raw mode is not suppressing it, and then no key data is
+    // produced.
+    this.signalHandler = () => this.handleInterrupt();
+    process.on("SIGINT", this.signalHandler);
+  }
+
+  /**
+   * Apply the Ctrl+C rule.
+   *
+   * The main screen has no level above it, so there is nothing to cancel back
+   * to and Ctrl+C quits. Everywhere else it cancels, exactly as Escape does.
+   * @returns {void}
+   */
+  handleInterrupt() {
+    // A terminal can hand the same Ctrl+C over twice, once as a key and once as
+    // a signal. Acting on both would cancel and then immediately quit, because
+    // the first cancel lands on the main screen where the rule is to exit. Two
+    // real presses are never this close together.
+    var now = Date.now();
+
+    if (now - this.lastInterruptAt < INTERRUPT_DEDUPE_MS)
+      return
+
+    this.lastInterruptAt = now;
+
+    // A modal owns the keyboard, so it takes the interrupt first. The signal
+    // path has no focus dispatch of its own, which is why the modal is tracked.
+    if (this.modal && this.modal.cancel) {
+      this.modal.cancel();
+      return
+    }
+
+    var screen = this.screen;
+
+    if (screen && screen.cancel && !(screen.isMainScreen && screen.isMainScreen())) {
+      screen.cancel();
+      return
+    }
+
+    this.quit();
+  }
+
+  /**
+   * Leave the current screen the way Escape does, quitting if it is the root.
+   * @returns {void}
+   */
+  cancelScreen() {
+    if (this.screen && this.screen.cancel && !(this.screen.isMainScreen && this.screen.isMainScreen())) {
+      this.screen.cancel();
+      return
+    }
+
+    // On the main screen Escape has no meaning, so nothing happens.
+  }
+
+  /**
+   * Show a component as a modal, remembering it.
+   *
+   * The reference is what lets a Ctrl+C delivered as a signal reach the modal,
+   * since a signal has no focus dispatch behind it.
+   * @param {object} component - Component to show.
+   * @param {object} [options] - Overlay options.
+   * @returns {object} Overlay handle whose hide() also clears the reference.
+   */
+  showModal(component, options) {
+    var self = this
+      , handle = this.tui.showOverlay(component, options);
+
+    self.modal = component;
+
+    return {
+      hide: () => {
+        if (self.modal === component)
+          self.modal = null;
+
+        handle.hide();
+      }
+    }
   }
 
   /**
@@ -222,7 +321,7 @@ class App {
             }
           }));
 
-      handle = self.tui.showOverlay(dialog, {
+      handle = self.showModal(dialog, {
         width: "70%",
         minWidth: 40,
         maxHeight: "70%",
@@ -308,6 +407,11 @@ class App {
       return
 
     this.quitting = true;
+
+    // Left installed, the handler would keep firing against a torn-down shell.
+    if (this.signalHandler)
+      process.removeListener("SIGINT", this.signalHandler);
+
     this.tui.stop();
     process.exit(0);
   }

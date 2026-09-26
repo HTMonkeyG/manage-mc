@@ -3,7 +3,7 @@ const { SelectList, matchesKey, visibleWidth, truncateToWidth } = require("@eare
 const WorldRegistry = require("../../records/registry");
 const Theme = require("../theme");
 
-const HINT = "Enter 详情 · i 导入 · e 导出 · E 导出全部 · p 注册 · r 刷新 · s 设置 · q 退出";
+const HINT = "Enter 详情 · i 导入 · e 导出 · E 导出全部 · p 注册 · r 刷新 · s 设置 · Ctrl+C 退出";
 
 // The name column adapts to its content within these bounds.
 const PRIMARY_MIN = 20;
@@ -85,6 +85,15 @@ class WorldListScreen {
    */
   focus() {
     return this.list
+  }
+
+  /**
+   * The world list is the root: there is no level above it to go back to, which
+   * makes it the one screen Ctrl+C quits from.
+   * @returns {boolean}
+   */
+  isMainScreen() {
+    return true
   }
 
   /**
@@ -292,11 +301,6 @@ class WorldListScreen {
    * @returns {object|undefined} Consume result.
    */
   handleKey(data) {
-    if (matchesKey(data, "q")) {
-      this.app.quit();
-      return { consume: true }
-    }
-
     if (matchesKey(data, "i")) {
       this.startImport();
       return { consume: true }

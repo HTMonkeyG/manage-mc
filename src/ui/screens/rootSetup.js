@@ -1,7 +1,7 @@
 const os = require("os")
   , path = require("path");
 
-const { Container, Input, Spacer, Text, Key, matchesKey } = require("@earendil-works/pi-tui");
+const { Container, Input, Spacer, Text } = require("@earendil-works/pi-tui");
 
 const Fsx = require("../../os/fsx");
 const GameLayout = require("../../os/paths");
@@ -53,25 +53,23 @@ class RootSetupScreen {
    * @returns {string}
    */
   hint() {
-    // Escape only goes back when a root is already in use. On first run there
-    // is nothing above this screen, so Ctrl+C is the way out.
-    return this.app && this.app.layout
-      ? "输入目录后按 Enter 校验并保存 · Esc 返回 · Ctrl+C 退出"
-      : "输入目录后按 Enter 校验并保存 · Ctrl+C 退出"
+    // On first run there is no world list to return to, so this screen stands
+    // in for the main one and Ctrl+C is the only way out.
+    return this.isMainScreen()
+      ? "输入目录后按 Enter 校验并保存 · Ctrl+C 退出"
+      : "输入目录后按 Enter 校验并保存 · Esc/Ctrl+C 返回"
   }
 
   /**
-   * Handle screen level hotkeys.
-   * @param {string} data - Raw key data.
-   * @returns {object|undefined} Consume result.
+   * Whether this screen is standing in for the main one.
+   *
+   * Changing an existing root returns to the world list, so the main screen is
+   * still behind it. With no root configured yet there is nothing behind it and
+   * this screen becomes the root, which is what makes Ctrl+C able to quit.
+   * @returns {boolean}
    */
-  handleKey(data) {
-    if (matchesKey(data, Key.escape) && this.app && this.app.layout) {
-      this.cancel();
-      return { consume: true }
-    }
-
-    return undefined
+  isMainScreen() {
+    return !(this.app && this.app.layout)
   }
 
   /**

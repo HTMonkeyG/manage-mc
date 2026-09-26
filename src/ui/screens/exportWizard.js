@@ -1,7 +1,7 @@
 const fs = require("fs")
   , path = require("path");
 
-const { Container, Input, Spacer, Text, Key, matchesKey } = require("@earendil-works/pi-tui");
+const { Container, Input, Spacer, Text } = require("@earendil-works/pi-tui");
 
 const Config = require("../../config");
 const Fsx = require("../../os/fsx");
@@ -57,7 +57,7 @@ class ExportWizardScreen {
    * @returns {string}
    */
   hint() {
-    return "输入目标目录后按 Enter · Esc 返回"
+    return "输入目标目录后按 Enter · Esc/Ctrl+C 返回"
   }
 
   /**
@@ -78,7 +78,7 @@ class ExportWizardScreen {
 
     var format = app.config.export.format;
 
-    this.input.setValue(app.config.lastExportDir || "");
+    this.input.setValue("");
     this.input.onSubmit = value => this.start(value);
 
     this.container.addChild(new Text("选择导出目标目录，包会写在该目录下。", 0, 0));
@@ -206,22 +206,24 @@ class ExportWizardScreen {
    * @param {string} data - Raw key data.
    * @returns {object|undefined} Consume result.
    */
-  handleKey(data) {
-    // Matched, not compared: Escape arrives as \x1b or \x1b[27u depending on
-    // the terminal, and every other key belongs to the focused path input.
-    if (matchesKey(data, Key.escape)) {
-      this.back();
-      return { consume: true }
-    }
-
-    return undefined
-  }
-
   /**
-   * Return to the previous screen.
+   * Leave this screen, as Escape and Ctrl+C both ask for.
+   *
+   * A run in progress is aborted rather than merely hidden: the exporter cleans
+   * up its staging directory when its signal fires, so nothing half written is
+   * left behind.
    * @returns {Promise<void>}
    */
-  async back() {
+  async cancel() {
+    if (this.abort) {
+      this.app.setStatus("正在取消导出…", "warn");
+      this.abort.abort();
+      return
+    }
+
+    if (this.busy)
+      return
+
     if (this.onDone)
       await this.onDone()
   }
@@ -305,6 +307,7 @@ class ExportWizardScreen {
     var report;
 
     this.busy = true;
+    this.abort = new AbortController();
 
     try {
       report = await this.app.withProgress("正在导出…", progress => WorldExporter.exportWorlds(
@@ -316,6 +319,7 @@ class ExportWizardScreen {
           includeUsers: this.app.config.export.includeUsers !== false,
           includeOrphanUsers: Boolean(this.app.config.export.includeOrphanUsers),
           decryptXor: this.app.config.export.decryptWorlds !== false,
+          signal: this.abort.signal,
           onProgress: progress
         }
       ));
@@ -330,6 +334,7 @@ class ExportWizardScreen {
       return
     } finally {
       this.busy = false;
+      this.abort = null;
     }
 
     await Config.save({ lastExportDir: dest });

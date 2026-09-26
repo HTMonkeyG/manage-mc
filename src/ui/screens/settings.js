@@ -1,4 +1,4 @@
-const { SettingsList, Key, matchesKey } = require("@earendil-works/pi-tui");
+const { SettingsList, matchesKey } = require("@earendil-works/pi-tui");
 
 const Config = require("../../config");
 const Theme = require("../theme");
@@ -49,7 +49,7 @@ class SettingsScreen {
    * @returns {string}
    */
   hint() {
-    return "↑↓ 选择 · Enter/空格 切换 · r 更换数据目录 · Esc/b 返回 · q 退出"
+    return "↑↓ 选择 · Enter/空格 切换 · r 更换数据目录 · Esc/b/Ctrl+C 返回"
   }
 
   /**
@@ -186,24 +186,26 @@ class SettingsScreen {
    * @returns {object|undefined} Consume result.
    */
   handleKey(data) {
-    if (matchesKey(data, "q") || matchesKey(data, Key.ctrl("q"))) {
-      this.app.quit();
-      return { consume: true }
-    }
-
+    // Escape and Ctrl+C never reach here: the shell routes both to cancel().
     if (matchesKey(data, "r")) {
       this.changeRoot();
       return { consume: true }
     }
 
-    // Matched, not compared: Escape arrives as \x1b or \x1b[27u depending on
-    // the terminal.
-    if (matchesKey(data, Key.escape) || matchesKey(data, "b")) {
+    if (matchesKey(data, "b")) {
       this.back();
       return { consume: true }
     }
 
     return undefined
+  }
+
+  /**
+   * Leave this screen, as Escape and Ctrl+C both ask for.
+   * @returns {Promise<void>}
+   */
+  async cancel() {
+    await this.back();
   }
 
   /**

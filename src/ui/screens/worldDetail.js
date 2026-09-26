@@ -90,7 +90,7 @@ class WorldDetailScreen {
    * @returns {string}
    */
   hint() {
-    var base = "↑↓ 滚动 · e 导出 · b/Esc 返回 · q 退出";
+    var base = "↑↓ 滚动 · e 导出 · b/Esc/Ctrl+C 返回";
 
     return this.entry.state === "unregistered" ? `p 登记 · ${base}` : base
   }
@@ -379,15 +379,8 @@ class WorldDetailScreen {
    * @returns {object|undefined} Consume result.
    */
   handleKey(data) {
-    if (matchesKey(data, "q") || matchesKey(data, Key.ctrl("q"))) {
-      this.app.quit();
-      return { consume: true }
-    }
-
-    // Escape is matched rather than compared against a literal: the same key
-    // arrives as a bare \x1b or as the Kitty sequence \x1b[27u depending on the
-    // terminal, and only one of those equals "\u001b".
-    if (matchesKey(data, Key.escape) || matchesKey(data, "b")) {
+    // Escape and Ctrl+C never reach here: the shell routes both to cancel().
+    if (matchesKey(data, "b")) {
       this.back();
       return { consume: true }
     }
@@ -429,6 +422,14 @@ class WorldDetailScreen {
     }
 
     return undefined
+  }
+
+  /**
+   * Leave this screen, as Escape and Ctrl+C both ask for.
+   * @returns {Promise<void>}
+   */
+  async cancel() {
+    await this.back();
   }
 
   /**
