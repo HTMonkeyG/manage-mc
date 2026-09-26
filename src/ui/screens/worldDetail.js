@@ -38,6 +38,7 @@ class WorldDetailScreen {
     this.scroll = null;
     this.dbState = null;
     this.integrity = null;
+    this.loadError = null;
   }
 
   /**
@@ -92,7 +93,8 @@ class WorldDetailScreen {
    * @returns {string}
    */
   hint() {
-    var base = "↑↓ 滚动 · e 导出 · x 危险区 · b/Esc/Ctrl+C 返回";
+    // Listed key by key, the way the main screen lists its own.
+    var base = "↑↓/Home/End 滚动 · PgUp/PgDn 翻页 · e 导出 · x 危险区 · b/Esc/Ctrl+C 返回";
 
     return this.entry.state === "unregistered" ? `p 登记 · ${base}` : base
   }
@@ -134,26 +136,45 @@ class WorldDetailScreen {
    * @returns {Promise<void>}
    */
   async load(app) {
-    var entry = this.entry;
+    var entry = this.entry
+      , failures = [];
 
-    try {
+    // Each step is caught on its own for two reasons: one unreadable file must
+    // not stop the rest from being read, and a failure has to be reported in
+    // the panel rather than the status bar, which carries the key hints and
+    // must not be taken over by a background error.
+    const step = async (label, run) => {
+      try {
+        await run();
+      } catch (e) {
+        failures.push(`${label}：${e.message}`);
+      }
+    };
+
+    await step("读取 level.dat", async () => {
       if (entry.worldDir && !entry.levelMeta)
         await WorldRegistry.loadMeta(entry);
+    });
 
+    await step("统计大小", async () => {
       if (entry.worldDir && !entry.size)
         await WorldRegistry.measure(entry);
+    });
 
+    await step("检查数据库", async () => {
       if (entry.worldDir && !this.dbState)
         this.dbState = await WorldDetailScreen.inspectDatabase(entry);
+    });
 
+    await step("检查完整性", async () => {
       if (entry.worldDir && !this.integrity)
         this.integrity = await WorldIntegrity.check(entry.worldDir);
+    });
 
-      this.panel.setRows(this.buildRows());
-      app.tui.requestRender();
-    } catch (e) {
-      app.setStatus(`读取详情失败：${e.message}`, "error");
-    }
+    this.loadError = failures.length > 0 ? failures.join("；") : null;
+
+    this.panel.setRows(this.buildRows());
+    app.tui.requestRender();
   }
 
   /**
@@ -189,6 +210,15 @@ class WorldDetailScreen {
         ? `${Theme.time(entry.lastPlayed)}${fromLevelDat ? "" : Theme.chalk.dim("（据账号记录，非精确值）")}`
         : Theme.chalk.dim("—")
     });
+
+    if (this.loadError) {
+      rows.push({ section: "读取问题" });
+
+      for (var failure of this.loadError.split("；"))
+        rows.push({ text: Theme.chalk.red(`  ! ${failure}`) });
+
+      rows.push({ text: Theme.chalk.dim("  面板上的信息可能不完整。") });
+    }
 
     if (this.integrity)
       rows.push(...this.integrityRows());

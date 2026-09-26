@@ -240,10 +240,16 @@ class App {
     // in a plain Container would hide a ScrollView from the layout, leaving it
     // with no viewport height and neither wheel nor keyboard scrolling.
     if (isViewportTUI(this.tui)) {
+      // The body takes no base size of its own and grows into whatever the
+      // fixed rows leave. That matters because a ScrollView measures as its
+      // entire content: with an intrinsic basis it would claim the full
+      // terminal height and push the status bar off the bottom, taking the key
+      // hints with it. The header and status must not shrink, so the body
+      // always loses that argument rather than them.
       this.tui.setLayoutRoot(new VStack([
-        { component: this.header, basis: 2 },
-        { component: component, grow: 1, minSize: 3 },
-        { component: this.status, basis: 1 }
+        { component: this.header, basis: 2, shrink: 0 },
+        { component: component, basis: 0, grow: 1, minSize: 3 },
+        { component: this.status, basis: 1, shrink: 0 }
       ], { gap: 0 }));
     }
 
