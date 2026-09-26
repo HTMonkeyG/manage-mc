@@ -1,6 +1,6 @@
 const crypto = require("crypto");
 
-const { ProcessTerminal, TuiAltScreen, VStack, isViewportTUI, Key, matchesKey } = require("@earendil-works/pi-tui");
+const { ProcessTerminal, TuiAltScreen, VStack, isViewportTUI, Key, matchesKey, isKeyRelease } = require("@earendil-works/pi-tui");
 
 const Config = require("../config");
 const GameLayout = require("../os/paths");
@@ -45,6 +45,17 @@ class App {
     // Routing them here keeps one rule for the whole application instead of a
     // clause in every screen.
     this.tui.addInputListener(data => {
+      // A key release is not a second press. A terminal using the Kitty
+      // protocol reports both, and matchesKey() matches the release as readily
+      // as the press, so acting on one would leave the screen and then
+      // immediately leave the screen it just returned to — unwinding two
+      // levels from a single key. The TUI filters releases before handing them
+      // to a focused component, but input listeners see them, so the filter has
+      // to happen here. Returning undefined lets it fall through to that path,
+      // where a component that genuinely wants releases can still get them.
+      if (isKeyRelease(data))
+        return undefined
+
       // A modal owns the keyboard, cancel gestures included: it decides for
       // itself what Escape and Ctrl+C mean while it is open.
       if (this.tui.hasOverlay())
