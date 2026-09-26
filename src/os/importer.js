@@ -39,6 +39,7 @@ class WorldImporter {
    * @param {"copy"|"replace"|"merge"} [opts.onCollision] - Collision policy.
    * @param {string[]} [opts.select] - Level ids to import, defaults to all.
    * @param {string[]} [opts.userIds] - Accounts to record, or undefined to keep the source's.
+   * @param {string} [opts.targetLevelId] - Force the destination id, for replacing a world.
    * @returns {Promise<object>} Import plan.
    */
   static async plan(layout, source, opts) {
@@ -85,7 +86,19 @@ class WorldImporter {
       , destId = candidate.levelId
       , minted = false;
 
-    if (!LevelId.isSafe(destId)) {
+    if (options.targetLevelId) {
+      // Replacing a world the caller picked. The destination is fixed, so no
+      // collision policy applies: whatever sits under that id is precisely what
+      // is being replaced.
+      destId = options.targetLevelId;
+      taken.add(destId);
+
+      var hit = await LevelId.probeCollision(layout, destId, uids);
+
+      warnings.push(hit.any
+        ? `替换现有存档 ${destId}`
+        : `在该 id 下新建存档 ${destId}`);
+    } else if (!LevelId.isSafe(destId)) {
       destId = LevelId.mint(layout, taken);
       minted = true;
       warnings.push(`"${candidate.levelId}" cannot be used as a folder name; minted ${destId}`);

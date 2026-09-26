@@ -1,3 +1,5 @@
+const crypto = require("crypto");
+
 const { ProcessTerminal, TuiAltScreen, VStack, isViewportTUI, Key, matchesKey } = require("@earendil-works/pi-tui");
 
 const Config = require("../config");
@@ -367,6 +369,28 @@ class App {
       return null
 
     return result.value.trim() || null
+  }
+
+  /**
+   * Confirm a dangerous action by typing a freshly generated code.
+   *
+   * The code is drawn each time and shown in the dialog, so it cannot be
+   * answered from habit: a destructive keystroke has to be deliberate.
+   * @param {string} title - Dialog title.
+   * @param {string[]} lines - Body lines describing exactly what will happen.
+   * @returns {Promise<boolean>} Whether the code was typed correctly.
+   */
+  async confirmDanger(title, lines) {
+    var code = String(crypto.randomInt(1000, 10000))
+      , result = await this.ask({
+          title: title,
+          lines: lines.concat(["", `请输入验证码 ${Theme.chalk.bold(code)} 以确认：`]),
+          requireText: code,
+          placeholder: code,
+          hint: "输入完全一致后按 Enter · Esc 取消"
+        });
+
+    return result.ok
   }
 
   /**

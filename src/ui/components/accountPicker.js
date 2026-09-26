@@ -21,12 +21,20 @@ class AccountPicker {
    * @param {object} opts.app - Application shell, used for the add dialog.
    * @param {object[]} opts.candidates - Candidate accounts.
    * @param {string[]} opts.selected - Accounts selected initially.
+   * @param {string} [opts.title] - Heading, defaults to 选择账号.
+   * @param {string} [opts.hint] - Key hint line.
+   * @param {boolean} [opts.allowAdd] - Offer the free-entry row, default true.
    * @param {function(string[]|null): void} opts.done - Chosen accounts, or null when cancelled.
    */
   constructor(opts) {
     this.app = opts.app;
     this.candidates = (opts.candidates || []).slice();
     this.checked = new Set(opts.selected || []);
+    this.title = opts.title || "选择账号";
+    this.hintText = opts.hint || (opts.allowAdd === false
+      ? "空格 勾选 · Enter 继续 · Esc 取消"
+      : "空格 勾选 · a 添加账号 · Enter 继续 · Esc 取消");
+    this.allowAdd = opts.allowAdd !== false;
     this.done = opts.done;
     this.settled = false;
     this._focused = false;
@@ -84,15 +92,17 @@ class AccountPicker {
       this.items.push({
         value: entry.uid,
         label: `${this.checked.has(entry.uid) ? CHECKED : UNCHECKED} ${entry.uid}`,
-        description: UserFolders.describe(entry)
+        // A caller that supplies its own note is not describing an import.
+        description: entry.note || UserFolders.describe(entry)
       });
     }
 
-    this.items.push({
-      value: ADD_ROW,
-      label: "＋ 添加账号…",
-      description: "手动输入要写入 user_ids 的账号"
-    });
+    if (this.allowAdd)
+      this.items.push({
+        value: ADD_ROW,
+        label: "＋ 添加账号…",
+        description: "手动输入要写入 user_ids 的账号"
+      });
   }
 
   /**
@@ -239,13 +249,13 @@ class AccountPicker {
     var chalk = Theme.chalk
       , lines = [];
 
-    lines.push(Theme.pad(chalk.bold("选择账号") + chalk.dim(`    已选 ${this.checked.size} 个`), width));
+    lines.push(Theme.pad(chalk.bold(this.title) + chalk.dim(`    已选 ${this.checked.size} 个`), width));
     lines.push(Theme.pad(chalk.dim("─".repeat(Math.max(0, width))), width));
 
     for (var line of this.list.render(width))
       lines.push(line);
 
-    lines.push(Theme.pad(chalk.dim("空格 勾选 · a 添加账号 · Enter 继续 · Esc 取消"), width));
+    lines.push(Theme.pad(chalk.dim(this.hintText), width));
 
     return lines
   }

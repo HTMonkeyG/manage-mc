@@ -28,9 +28,11 @@ class ImportWizardScreen {
    * Import wizard: pick a source, review the plan, then copy it in.
    * @param {object} opts - Options.
    * @param {function(): Promise<void>} [opts.onDone] - Called after a successful import.
+   * @param {object} [opts.target] - World entry to replace instead of importing alongside.
    */
   constructor(opts) {
     this.onDone = (opts || {}).onDone;
+    this.target = (opts || {}).target || null;
     this.app = null;
     this.busy = false;
     this.container = new Container();
@@ -46,7 +48,7 @@ class ImportWizardScreen {
    * @returns {string}
    */
   title() {
-    return "导入存档"
+    return this.target ? "替换存档" : "导入存档"
   }
 
   /**
@@ -191,11 +193,25 @@ class ImportWizardScreen {
    * @returns {Promise<void>}
    */
   async review(source, resolved) {
-    var lines = [
-      `来源类型：${ImportWizardScreen.kindLabel(source.kind)}`,
-      `来源路径：${source.rootPath}`,
-      `识别到 ${source.worlds.length} 个世界`
-    ];
+    var lines = [];
+
+    if (this.target) {
+      lines.push(`将被替换：${Theme.plain(this.target.displayName)}`);
+      lines.push(`level_id：${this.target.levelId}`);
+      lines.push(Theme.chalk.yellow("替换会覆盖该存档的世界目录、数据库与注册表记录。"));
+      lines.push("");
+    }
+
+    lines.push(`来源类型：${ImportWizardScreen.kindLabel(source.kind)}`);
+    lines.push(`来源路径：${source.rootPath}`);
+    lines.push(`识别到 ${source.worlds.length} 个世界`);
+
+    // Replacing uses the first world the source offers; importing alongside
+    // uses all of them.
+    if (this.target && source.worlds.length > 1) {
+      lines.push(`将使用来源中的第一个：${source.worlds[0].levelId}`);
+      source = Object.assign({}, source, { worlds: [source.worlds[0]] });
+    }
 
     if (source.worlds.length <= LIST_LIMIT)
       for (var world of source.worlds)
@@ -230,7 +246,10 @@ class ImportWizardScreen {
 
     try {
       plan = await WorldImporter.plan(this.app.layout, source, {
-        onCollision: this.app.config.import.onCollision,
+        // Replacing fixes the destination to the world being replaced, so the
+        // ordinary collision policy does not apply.
+        onCollision: this.target ? "replace" : this.app.config.import.onCollision,
+        targetLevelId: this.target ? this.target.levelId : undefined,
         userIds: chosen
       });
       preflight = await WorldImporter.preflight(plan, this.app.layout);

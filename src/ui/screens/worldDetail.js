@@ -92,7 +92,7 @@ class WorldDetailScreen {
    * @returns {string}
    */
   hint() {
-    var base = "↑↓ 滚动 · e 导出 · b/Esc/Ctrl+C 返回";
+    var base = "↑↓ 滚动 · e 导出 · x 危险区 · b/Esc/Ctrl+C 返回";
 
     return this.entry.state === "unregistered" ? `p 登记 · ${base}` : base
   }
@@ -480,6 +480,11 @@ class WorldDetailScreen {
       return { consume: true }
     }
 
+    if (matchesKey(data, "x")) {
+      this.dangerZone();
+      return { consume: true }
+    }
+
     // The alt screen leaves its single-line scroll bindings unbound by default,
     // and binding the arrow keys globally would stop them reaching a focused
     // list. The detail view is the only scrollable screen, so it scrolls itself.
@@ -537,6 +542,23 @@ class WorldDetailScreen {
     await this.app.show(new ExportWizardScreen({
       entries: [this.entry],
       onDone: async () => this.back()
+    }));
+  }
+
+  /**
+   * Open the danger zone for this world.
+   * @returns {Promise<void>}
+   */
+  async dangerZone() {
+    var DangerZoneScreen = require("./dangerZone")
+      , entry = this.entry;
+
+    await this.app.show(new DangerZoneScreen(entry, {
+      onLeave: async () => {
+        var WorldDetailScreen = require("./worldDetail");
+
+        await this.app.show(new WorldDetailScreen(entry));
+      }
     }));
   }
 
