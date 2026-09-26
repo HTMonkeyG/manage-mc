@@ -1,5 +1,6 @@
 const { SelectList, matchesKey, visibleWidth, truncateToWidth } = require("@earendil-works/pi-tui");
 
+const WorldIntegrity = require("../../records/integrity");
 const WorldRegistry = require("../../records/registry");
 const Theme = require("../theme");
 
@@ -161,7 +162,8 @@ class WorldListScreen {
    */
   static labelOf(entry) {
     var name = Theme.plain(entry.displayName) || entry.levelId
-      , marker = entry.anomalies.length > 0 ? " ⚠" : "";
+      , broken = entry.integrity !== null && entry.integrity !== undefined && !entry.integrity.ok
+      , marker = (entry.anomalies.length > 0 || broken) ? " ⚠" : "";
 
     return `${name}  [${Theme.stateLabel(entry.state)}]${marker}`
   }
@@ -181,6 +183,9 @@ class WorldListScreen {
 
     if (entry.size)
       parts.push(`${Theme.size(entry.size.bytes)}`)
+
+    if (entry.integrity && !entry.integrity.ok)
+      parts.push(`损坏：${WorldIntegrity.summarize(entry.integrity)}`)
 
     if (entry.state === "online")
       parts.push("仅注册表")
@@ -213,6 +218,9 @@ class WorldListScreen {
 
         try {
           await WorldRegistry.measure(entry);
+          // Checked here rather than in build(), so a broken world is flagged
+          // once the list has already painted.
+          await WorldRegistry.checkIntegrity(entry);
         } catch (e) {
           continue
         }

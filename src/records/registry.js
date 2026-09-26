@@ -2,6 +2,7 @@ const path = require("path");
 
 const Fsx = require("../os/fsx");
 const LevelDat = require("../os/leveldat");
+const WorldIntegrity = require("./integrity");
 const WorldRecord = require("./record");
 
 // Sort order for the world list: things that work first, things that need
@@ -75,6 +76,7 @@ class WorldRegistry {
       entry.anomalies = WorldRegistry.anomaliesOf(entry);
       entry.size = null;
       entry.levelMeta = null;
+      entry.integrity = null;
 
       if (withMeta && entry.worldDir)
         entry.levelMeta = await LevelDat.readMeta(entry.worldDir);
@@ -132,6 +134,22 @@ class WorldRegistry {
       return null
 
     return Math.max.apply(null, stamps)
+  }
+
+  /**
+   * Check a world's files on demand.
+   *
+   * Kept out of build() for the same reason as measure(): the check reads the
+   * folder, and the list should not wait for that before it can paint.
+   * @param {object} entry - World entry.
+   * @returns {Promise<object|null>} Integrity report, or null when there is no folder.
+   */
+  static async checkIntegrity(entry) {
+    if (!entry.worldDir)
+      return null
+
+    entry.integrity = await WorldIntegrity.check(entry.worldDir);
+    return entry.integrity
   }
 
   /**

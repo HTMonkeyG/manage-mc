@@ -8,6 +8,7 @@ const LevelDat = require("./leveldat");
 const Pack = require("./pack");
 const XorEnc = require("./xorenc");
 const RecordSchema = require("../records/schema");
+const WorldIntegrity = require("../records/integrity");
 const WorldRecord = require("../records/record");
 const UserFolders = require("../records/users");
 
@@ -242,6 +243,17 @@ class WorldExporter {
 
     if (!worldPresent && users.omitted.length > 0)
       notes.push("no world data is present, so only the registry entry is exported");
+
+    // A world folder can be registered and still be missing the files the
+    // client needs, in which case the package inherits the damage.
+    if (worldPresent) {
+      var integrity = await WorldIntegrity.check(entry.worldDir);
+
+      // The messages rather than the codes: this note is read by a person, and
+      // "EDB" tells them nothing.
+      if (!integrity.ok)
+        notes.push(`源存档不完整，导出的包同样是损坏的：${integrity.errors.map(p => p.message).join("；")}`);
+    }
 
     return {
       levelId: entry.levelId,

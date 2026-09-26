@@ -30,6 +30,14 @@ const CLIENT_ENCRYPTED_RE = /^(CURRENT|MANIFEST-\d{6,}|\d{6,}\.ldb)$/;
 
 class XorEnc {
   /**
+   * The key the client itself applies.
+   * @returns {Buffer} A copy, so a caller cannot mutate the shared value.
+   */
+  static defaultKey() {
+    return Buffer.from(DEFAULT_KEY)
+  }
+
+  /**
    * Test whether a buffer carries the encryption magic number.
    * @param {Buffer} buf - Buffer to test.
    * @returns {boolean}

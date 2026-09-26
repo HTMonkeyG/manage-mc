@@ -5,6 +5,7 @@ const { ScrollView, Key, matchesKey } = require("@earendil-works/pi-tui");
 const Fsx = require("../../os/fsx");
 const XorEnc = require("../../os/xorenc");
 const LevelId = require("../../records/levelid");
+const WorldIntegrity = require("../../records/integrity");
 const WorldRecord = require("../../records/record");
 const WorldRegistry = require("../../records/registry");
 const Theme = require("../theme");
@@ -36,6 +37,7 @@ class WorldDetailScreen {
     this.panel = new InfoPanel();
     this.scroll = null;
     this.dbState = null;
+    this.integrity = null;
   }
 
   /**
@@ -144,6 +146,9 @@ class WorldDetailScreen {
       if (entry.worldDir && !this.dbState)
         this.dbState = await WorldDetailScreen.inspectDatabase(entry);
 
+      if (entry.worldDir && !this.integrity)
+        this.integrity = await WorldIntegrity.check(entry.worldDir);
+
       this.panel.setRows(this.buildRows());
       app.tui.requestRender();
     } catch (e) {
@@ -185,6 +190,9 @@ class WorldDetailScreen {
         : Theme.chalk.dim("—")
     });
 
+    if (this.integrity)
+      rows.push(...this.integrityRows());
+
     if (this.dbState)
       rows.push(...this.databaseRows());
 
@@ -206,6 +214,83 @@ class WorldDetailScreen {
     if (entry.state !== "registered") {
       rows.push({ section: "状态说明" });
       rows.push({ text: `  ${Theme.stateHint(entry.state)}` });
+    }
+
+    return rows
+  }
+
+  /**
+   * Colour a required file's name by whether it is present.
+   * @param {string} name - File or folder name to show.
+   * @param {boolean} present - Whether it was found.
+   * @returns {string} The name, in bold green or bold red.
+   */
+  static markFile(name, present) {
+    var chalk = Theme.chalk;
+
+    return present ? chalk.green.bold(name) : chalk.red.bold(name)
+  }
+
+  /**
+   * Rows describing whether the world's own files are all present.
+   * @returns {object[]}
+   */
+  integrityRows() {
+    var report = this.integrity
+      , chalk = Theme.chalk
+      , rows = [{ section: "完整性" }];
+
+    rows.push({
+      key: "结论",
+      value: report.ok
+        ? (report.warnings.length > 0 ? chalk.yellow(`可用，但有 ${report.warnings.length} 项警告`) : chalk.green("完整"))
+        : chalk.red(`缺少或损坏 ${report.errors.length} 项必需文件`)
+    });
+
+    var present = report.present;
+
+    // The name carries the verdict: green when the file is there, red when it
+    // is not, so the row reads at a glance without a separate 有/无 column.
+    rows.push({
+      key: "必需文件",
+      value: [
+        WorldDetailScreen.markFile("level.dat", present.levelDat),
+        WorldDetailScreen.markFile("db/", present.db),
+        WorldDetailScreen.markFile("CURRENT", present.current),
+        WorldDetailScreen.markFile("MANIFEST-*", Boolean(present.manifest))
+      ].join(chalk.dim(" · "))
+    });
+
+    // Counts rather than presence, so they stay neutral: a file type with none
+    // of its files is reported in the problem list instead.
+    if (present.db)
+      rows.push({
+        key: "数据库内容",
+        value: [
+          chalk.white.bold(`.ldb: ${present.tables}`),
+          chalk.white.bold(`.log: ${present.logs}`)
+        ].join(chalk.dim(" · "))
+      });
+
+    if (report.current && report.current.name)
+      rows.push({ key: "CURRENT 指向", value: report.current.name });
+
+    if (report.problems.length === 0) {
+      rows.push({ text: chalk.dim("  该存档所需的文件齐全。") });
+      return rows
+    }
+
+    for (var problem of report.problems)
+      rows.push({
+        text: problem.level === "error"
+          ? chalk.red(`  ! ${problem.message}`)
+          : chalk.yellow(`  · ${problem.message}`)
+      });
+
+    if (!report.ok) {
+      rows.push({ text: "" });
+      rows.push({ text: chalk.dim("  缺少必需文件的存档客户端无法打开。导出仍会进行，") });
+      rows.push({ text: chalk.dim("  但得到的包同样是损坏的。") });
     }
 
     return rows

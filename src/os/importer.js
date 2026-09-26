@@ -5,6 +5,7 @@ const fsp = require("fs/promises")
 const Fsx = require("./fsx");
 const LevelDat = require("./leveldat");
 const XorEnc = require("./xorenc");
+const WorldIntegrity = require("../records/integrity");
 const LevelId = require("../records/levelid");
 const RecordSchema = require("../records/schema");
 const UserFolders = require("../records/users");
@@ -127,7 +128,14 @@ class WorldImporter {
 
     // Account folders are not created: the selected accounts are written into
     // the record's user_ids, and that map is what the client reads.
-    var size = worldPresent ? await Fsx.du(candidate.worldDir) : { files: 0, bytes: 0 };
+    var size = worldPresent ? await Fsx.du(candidate.worldDir) : { files: 0, bytes: 0 }
+      , integrity = worldPresent ? await WorldIntegrity.check(candidate.worldDir) : null;
+
+    // A source folder can be present and still be missing what the client
+    // needs. Copying it in would produce a registered world that cannot open,
+    // so the damage is reported rather than carried over silently.
+    if (integrity && !integrity.ok)
+      warnings.push(`"${candidate.levelId}" 源存档不完整：${integrity.errors.map(p => p.message).join("；")}`);
 
     // A package whose database was decrypted for export has to be encrypted
     // again, because the client only reads an encrypted database. The recorded
@@ -160,6 +168,7 @@ class WorldImporter {
       notes: built.notes,
       levelMeta: levelMeta,
       size: size,
+      integrity: integrity,
       xor: xor,
       warnings: warnings
     }
