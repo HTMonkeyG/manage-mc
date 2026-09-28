@@ -78,10 +78,13 @@ class ExportWizardScreen {
 
     var format = app.config.export.format;
 
-    this.input.setValue("");
+    this.input.setValue(app.config.lastExportDir || "");
+    // WARN: Access private members for a better interaction.
+    //       The default cursor won't be reset even if setValue() is called.
+    this.input.cursor = this.input.value.length;
     this.input.onSubmit = value => this.start(value);
 
-    this.container.addChild(new Text("选择导出目标目录，包会写在该目录下。", 0, 0));
+    this.container.addChild(new Text("选择导出目标目录", 0, 0));
     this.container.addChild(new Spacer(1));
     this.container.addChild(this.input);
     this.container.addChild(new Spacer(1));
